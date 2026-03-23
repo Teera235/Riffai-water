@@ -1,0 +1,67 @@
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║   🚀 RIFFAI Platform - พร้อม Deploy แล้ว!                   ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+
+📋 ขั้นตอนง่ายๆ:
+
+1. ติดตั้ง gcloud CLI (ถ้ายังไม่มี)
+   → https://cloud.google.com/sdk/docs/install
+
+2. Login และสร้าง Project
+   → gcloud auth login
+   → gcloud projects create riffai-demo
+
+3. รันสคริปต์ Deploy
+   → cd riffai-platform
+   → deploy-gcp.bat        (Windows)
+   → ./deploy-gcp.sh       (Linux/Mac)
+
+⏱️  ใช้เวลา: 10-15 นาที
+💰 ค่าใช้จ่าย: ฟรี (ถ้าใช้น้อย)
+
+═══════════════════════════════════════════════════════════════
+
+📚 คู่มือทั้งหมด:
+
+✅ START-DEPLOY.md
+   → เริ่มต้นง่ายๆ ทีละขั้นตอน
+
+✅ DEPLOY-README.md
+   → เปรียบเทียบวิธี deploy 3 แบบ
+
+✅ DEPLOY-QUICK.md
+   → คำสั่งละเอียด + Cloud SQL
+
+✅ DEPLOYMENT-CHECKLIST.md
+   → Production แบบเต็มรูปแบบ
+
+═══════════════════════════════════════════════════════════════
+
+🎯 แนะนำ:
+
+• ทดสอบ/Demo → ใช้ deploy-gcp.bat (ฟรี, SQLite)
+• ใช้งานจริง → ดู DEPLOY-QUICK.md (Cloud SQL)
+• Production → ดู DEPLOYMENT-CHECKLIST.md (ครบทุกอย่าง)
+
+═══════════════════════════════════════════════════════════════
+
+✨ ไฟล์ที่เตรียมไว้แล้ว:
+
+✅ backend/Dockerfile          → พร้อม deploy
+✅ frontend/Dockerfile         → พร้อม deploy
+✅ backend/.dockerignore       → ไม่ upload ไฟล์ไม่จำเป็น
+✅ frontend/.dockerignore      → ไม่ upload ไฟล์ไม่จำเป็น
+✅ backend/cloudbuild.yaml     → Config สำหรับ Cloud Build
+✅ frontend/cloudbuild.yaml    → Config สำหรับ Cloud Build
+✅ deploy-gcp.bat              → สคริปต์ Windows
+✅ deploy-gcp.sh               → สคริปต์ Linux/Mac
+
+═══════════════════════════════════════════════════════════════
+
+🔥 Deploy เลย!
+
+เปิดไฟล์ START-DEPLOY.md แล้วทำตาม 3 ขั้นตอน
+
+═══════════════════════════════════════════════════════════════

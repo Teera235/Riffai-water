@@ -1,0 +1,153 @@
+from fastapi import APIRouter, Depends, Query, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_
+from datetime import datetime
+from typing import Optional
+
+from app.models.database import get_db
+from app.models.models import Basin, Station, SatelliteImage, Prediction, WaterLevel
+from app.services.gcs_service import GCSService
+from app.config import get_settings
+
+router = APIRouter()
+settings = get_settings()
+gcs = GCSService()
+
+
+@router.get("/basins")
+async def get_basins_geojson(db: AsyncSession = Depends(get_db)):
+    """ขอบเขต GeoJSON ของ 3 ลุ่มน้ำ"""
+    
+    basins = await db.execute(
+        select(Basin.id, Basin.name, Basin.provinces, Basin.area_sqkm, Basin.bbox)
+    )
+    
+    features = []
+    for basin in basins:
+        features.append({
+            "type": "Feature",
+            "properties": {
+                "id": basin[0],
+                "name": basin[1],
+                "provinces": basin[2],
+                "area_sqkm": basin[3],
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": _bbox_to_polygon(basin[4])
+            }
+        })
+    
+    return {
+        "type": "FeatureCollection",
+        "features": features
+    }
+
+
+@router.get("/stations")
+async def get_stations(
+    basin_id: Optional[str] = None,
+    station_type: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """สถานีตรวจวัดทั้งหมด"""
+    
+    query = select(Station).where(Station.is_active == True)
+    
+    if basin_id:
+        query = query.where(Station.basin_id == basin_id)
+    if station_type:
+        query = query.where(Station.station_type == station_type)
+    
+    result = await db.scalars(query)
+    stations = result.all()
+    
+    features = []
+    for s in stations:
+        features.append({
+            "type": "Feature",
+            "properties": {
+                "id": s.id,
+                "name": s.name,
+                "type": s.station_type,
+                "province": s.province,
+                "basin_id": s.basin_id,
+                "source": s.source,
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [s.lon, s.lat]
+            }
+        })
+    
+    return {"type": "FeatureCollection", "features": features}
+
+
+@router.get("/water-level-map")
+async def get_water_level_map(
+    basin_id: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """แผนที่ระดับน้ำปัจจุบัน ทุกสถานี"""
+    
+    query = (
+        select(
+            Station.id, Station.name, Station.lat, Station.lon,
+            Station.province, Station.basin_id,
+            WaterLevel.level_m, WaterLevel.datetime
+        )
+        .join(WaterLevel, WaterLevel.station_id == Station.id)
+        .where(Station.station_type == "water_level")
+        .where(Station.is_active == True)
+        .order_by(Station.id, WaterLevel.datetime.desc())
+        .distinct(Station.id)
+    )
+    
+    if basin_id:
+        query = query.where(Station.basin_id == basin_id)
+    
+    result = await db.execute(query)
+    
+    features = []
+    for row in result:
+        level = row[6]
+        risk = "normal"
+        if level and level > settings.ALERT_WATER_LEVEL_CRITICAL:
+            risk = "critical"
+        elif level and level > settings.ALERT_WATER_LEVEL_WARNING:
+            risk = "warning"
+        elif level and level > settings.ALERT_WATER_LEVEL_WARNING * 0.8:
+            risk = "watch"
+        
+        features.append({
+            "type": "Feature",
+            "properties": {
+                "station_id": row[0],
+                "name": row[1],
+                "province": row[4],
+                "basin_id": row[5],
+                "water_level_m": row[6],
+                "datetime": row[7].isoformat() if row[7] else None,
+                "risk_level": risk,
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [row[3], row[2]]
+            }
+        })
+    
+    return {"type": "FeatureCollection", "features": features}
+
+
+def _bbox_to_polygon(bbox):
+    """Convert [min_lon, min_lat, max_lon, max_lat] to Polygon coordinates"""
+    if not bbox:
+        return None
+    min_lon, min_lat, max_lon, max_lat = bbox
+    return [[
+        [min_lon, min_lat],
+        [max_lon, min_lat],
+        [max_lon, max_lat],
+        [min_lon, max_lat],
+        [min_lon, min_lat],
+    ]]

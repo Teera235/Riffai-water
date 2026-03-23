@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ../../backend
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://riffai:riffai123@db:5432/riffai
+      - REDIS_HOST=redis
+      - DEBUG=true
+      - GCP_PROJECT_ID=riffai-platform
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ../../backend/app:/app/app
+
+  db:
+    image: postgis/postgis:15-3.4
+    environment:
+      POSTGRES_DB: riffai
+      POSTGRES_USER: riffai
+      POSTGRES_PASSWORD: riffai123
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+    container_name: riffai-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+    depends_on:
+      - backend
+    volumes:
+      - ../../frontend/src:/app/src
+    restart: unless-stopped
+
+volumes:
+  pgdata:

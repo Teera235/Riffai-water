@@ -1,0 +1,17 @@
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/riffai-backend:$COMMIT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/riffai-backend:latest'
+      - '.'
+
+images:
+  - 'gcr.io/$PROJECT_ID/riffai-backend:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/riffai-backend:latest'
+
+options:
+  machineType: 'N1_HIGHCPU_8'
