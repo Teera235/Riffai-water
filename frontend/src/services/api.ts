@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const api = axios.create({
   baseURL: API_URL,
@@ -36,6 +36,8 @@ export const dashboardAPI = {
 // ═══════════ Map ═══════════
 export const mapAPI = {
   basins: () => api.get("/api/map/basins"),
+  rivers: () => api.get("/api/map/rivers"),
+  dams: () => api.get("/api/map/dams"),
   stations: (basinId?: string) =>
     api.get("/api/map/stations", { params: { basin_id: basinId } }),
   waterLevelMap: (basinId?: string) =>
@@ -44,6 +46,14 @@ export const mapAPI = {
     api.get(`/api/map/flood-layer/${basinId}`, { params: { date } }),
   satellite: (basinId: string, index = "ndwi") =>
     api.get(`/api/map/satellite/${basinId}`, { params: { index } }),
+  tiles: (riskLevel?: string) =>
+    api.get("/api/map/tiles", { params: { risk_level: riskLevel } }),
+  tilesSummary: () => api.get("/api/map/tiles/summary"),
+  tile: (tileId: string) => api.get(`/api/map/tiles/${tileId}`),
+  tileHistory: (tileId: string, days = 7) =>
+    api.get(`/api/map/tiles/${tileId}/history`, { params: { days } }),
+  tileSatellite: (tileId: string) =>
+    api.get(`/api/map/tiles/${tileId}/satellite`),
 };
 
 // ═══════════ Prediction ═══════════
@@ -77,6 +87,24 @@ export const dataAPI = {
     api.get(`/api/data/satellite-indices/${basinId}`, { params: { days } }),
   comparison: (basinId: string, year1: number, year2: number) =>
     api.get(`/api/data/comparison/${basinId}`, { params: { year1, year2 } }),
+};
+
+// ═══════════ Tambon Flood Prediction ═══════════
+export const tambonAPI = {
+  getTambon: (tbIdn: string) =>
+    api.get(`/api/flood/tambon/${tbIdn}`),
+  getProvinceTambons: (provinceName: string) =>
+    api.get(`/api/flood/tambon/province/${provinceName}`),
+  getTopRisk: (limit = 100) =>
+    api.get("/api/flood/tambon/top-risk", { params: { limit } }),
+  search: (query: string) =>
+    api.get("/api/flood/tambon/search", { params: { q: query } }),
+  getStats: () =>
+    api.get("/api/flood/tambon/stats"),
+  getBasinSummary: (basinId: string) =>
+    api.get(`/api/flood/tambon/basin/${basinId}/summary`),
+  getMapGeoJSON: (params?: { risk_level?: string; min_probability?: number; limit?: number }) =>
+    api.get("/api/flood/tambon/map/geojson", { params }),
 };
 
 // ═══════════ Pipeline ═══════════

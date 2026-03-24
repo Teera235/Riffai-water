@@ -8,6 +8,8 @@ from app.models.database import get_db
 from app.models.models import Basin, Station, SatelliteImage, Prediction, WaterLevel
 from app.services.gcs_service import GCSService
 from app.config import get_settings
+from app.data.rivers import get_rivers_geojson
+from app.data.dams import get_dams_geojson
 
 router = APIRouter()
 settings = get_settings()
@@ -17,31 +19,35 @@ gcs = GCSService()
 @router.get("/basins")
 async def get_basins_geojson(db: AsyncSession = Depends(get_db)):
     """ขอบเขต GeoJSON ของ 3 ลุ่มน้ำ"""
-    
-    basins = await db.execute(
-        select(Basin.id, Basin.name, Basin.provinces, Basin.area_sqkm, Basin.bbox)
-    )
-    
-    features = []
-    for basin in basins:
-        features.append({
-            "type": "Feature",
-            "properties": {
-                "id": basin[0],
-                "name": basin[1],
-                "provinces": basin[2],
-                "area_sqkm": basin[3],
-            },
-            "geometry": {
-                "type": "Polygon",
-                "coordinates": _bbox_to_polygon(basin[4])
-            }
-        })
-    
-    return {
-        "type": "FeatureCollection",
-        "features": features
-    }
+    try:
+        result = await db.execute(
+            select(Basin.id, Basin.name, Basin.provinces, Basin.area_sqkm, Basin.bbox)
+        )
+        basins = result.all()
+        
+        features = []
+        for basin in basins:
+            features.append({
+                "type": "Feature",
+                "properties": {
+                    "id": basin[0],
+                    "name": basin[1],
+                    "provinces": basin[2],
+                    "area_sqkm": basin[3],
+                },
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": _bbox_to_polygon(basin[4])
+                }
+            })
+        
+        return {
+            "type": "FeatureCollection",
+            "features": features
+        }
+    except Exception as e:
+        print(f"Error in get_basins_geojson: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to load basins: {str(e)}")
 
 
 @router.get("/stations")
@@ -51,36 +57,39 @@ async def get_stations(
     db: AsyncSession = Depends(get_db)
 ):
     """สถานีตรวจวัดทั้งหมด"""
-    
-    query = select(Station).where(Station.is_active == True)
-    
-    if basin_id:
-        query = query.where(Station.basin_id == basin_id)
-    if station_type:
-        query = query.where(Station.station_type == station_type)
-    
-    result = await db.scalars(query)
-    stations = result.all()
-    
-    features = []
-    for s in stations:
-        features.append({
-            "type": "Feature",
-            "properties": {
-                "id": s.id,
-                "name": s.name,
-                "type": s.station_type,
-                "province": s.province,
-                "basin_id": s.basin_id,
-                "source": s.source,
-            },
-            "geometry": {
-                "type": "Point",
-                "coordinates": [s.lon, s.lat]
-            }
-        })
-    
-    return {"type": "FeatureCollection", "features": features}
+    try:
+        query = select(Station).where(Station.is_active == True)
+        
+        if basin_id:
+            query = query.where(Station.basin_id == basin_id)
+        if station_type:
+            query = query.where(Station.station_type == station_type)
+        
+        result = await db.scalars(query)
+        stations = result.all()
+        
+        features = []
+        for s in stations:
+            features.append({
+                "type": "Feature",
+                "properties": {
+                    "id": s.id,
+                    "name": s.name,
+                    "type": s.station_type,
+                    "province": s.province,
+                    "basin_id": s.basin_id,
+                    "source": s.source,
+                },
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [s.lon, s.lat]
+                }
+            })
+        
+        return {"type": "FeatureCollection", "features": features}
+    except Exception as e:
+        print(f"Error in get_stations: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to load stations: {str(e)}")
 
 
 @router.get("/water-level-map")
@@ -151,3 +160,23 @@ def _bbox_to_polygon(bbox):
         [min_lon, max_lat],
         [min_lon, min_lat],
     ]]
+
+
+@router.get("/rivers")
+async def get_rivers():
+    """แม่น้ำสายหลักในประเทศไทย"""
+    try:
+        return get_rivers_geojson()
+    except Exception as e:
+        print(f"Error in get_rivers: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to load rivers: {str(e)}")
+
+
+@router.get("/dams")
+async def get_dams():
+    """เขื่อนและอ่างเก็บน้ำสำคัญ"""
+    try:
+        return get_dams_geojson()
+    except Exception as e:
+        print(f"Error in get_dams: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to load dams: {str(e)}")

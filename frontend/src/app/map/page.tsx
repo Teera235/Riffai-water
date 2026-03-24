@@ -8,8 +8,10 @@ import Navbar from "@/components/common/Navbar";
 import { mapAPI, pipelineAPI } from "@/services/api";
 import { GeoJSONFeatureCollection } from "@/types";
 import toast from "react-hot-toast";
+import TambonFloodLayer from "@/components/map/TambonFloodLayer";
+import TambonDetailPanel from "@/components/map/TambonDetailPanel";
 
-const MapView = dynamic(() => import("@/components/map/MapView"), {
+const MapView = dynamic(() => import("@/components/map/MapViewSimple"), {
   ssr: false,
   loading: () => (
     <div className="flex items-center justify-center h-full bg-primary-50 rounded-mono">
@@ -22,29 +24,45 @@ function MapContent() {
   const searchParams = useSearchParams();
   const [basins, setBasins] = useState<GeoJSONFeatureCollection | null>(null);
   const [waterLevels, setWaterLevels] = useState<GeoJSONFeatureCollection | null>(null);
+  const [rivers, setRivers] = useState<GeoJSONFeatureCollection | null>(null);
+  const [dams, setDams] = useState<GeoJSONFeatureCollection | null>(null);
+  const [tileSummary, setTileSummary] = useState<any>(null);
   const [selectedBasin, setSelectedBasin] = useState<string | null>(
     searchParams?.get("basin") || null
   );
   const [layers, setLayers] = useState({
     basins: true,
     waterLevels: true,
+    rivers: true,
+    dams: true,
     satellite: false,
     floodDepth: false,
     rainfall: true,
+    heatmap: true,
+    timelapse: false,
+    tambonFlood: false,
   });
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [selectedTambon, setSelectedTambon] = useState<any>(null);
 
   const loadMapData = async () => {
     try {
-      const [b, w] = await Promise.all([
+      const [b, w, r, d, ts] = await Promise.all([
         mapAPI.basins(),
         mapAPI.waterLevelMap(selectedBasin || undefined),
+        mapAPI.rivers(),
+        mapAPI.dams(),
+        mapAPI.tilesSummary(),
       ]);
       setBasins(b.data);
       setWaterLevels(w.data);
+      setRivers(r.data);
+      setDams(d.data);
+      setTileSummary(ts.data);
+      console.log("Map data loaded:", { basins: b.data, rivers: r.data, dams: d.data });
     } catch (err) {
-      console.error(err);
+      console.error("Failed to load map data:", err);
       toast.error("โหลดข้อมูลแผนที่ล้มเหลว");
     } finally {
       setLoading(false);
@@ -104,7 +122,12 @@ function MapContent() {
           </h3>
           <div className="space-y-2">
             {[
+              { key: "heatmap" as const, label: "Flood Risk Heatmap", description: "Grid-based risk visualization" },
+              { key: "tambonFlood" as const, label: "Tambon Flood Prediction", description: "XGBoost AI model (6,363 tambons)" },
+              { key: "timelapse" as const, label: "Time-lapse Animation", description: "Historical playback (7 days)" },
               { key: "basins" as const, label: "Basin Boundaries", description: "Administrative boundaries" },
+              { key: "rivers" as const, label: "Rivers", description: "Major river systems" },
+              { key: "dams" as const, label: "Dams & Reservoirs", description: "Water management infrastructure" },
               { key: "waterLevels" as const, label: "Water Levels", description: "Current station readings" },
               { key: "floodDepth" as const, label: "Flood Depth", description: "Predicted inundation depth" },
               { key: "rainfall" as const, label: "Rainfall Data", description: "Precipitation measurements" },
@@ -189,43 +212,86 @@ function MapContent() {
         {/* Stats */}
         {waterLevels && (
           <div className="mt-6 space-y-3">
-            <div className="p-4 bg-primary-50 border border-primary-200 rounded-mono">
-              <div className="text-xs font-semibold text-primary-900 uppercase tracking-wider mb-3">
+            {/* Tile Heatmap Summary */}
+            {layers.heatmap && tileSummary && (
+              <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-mono">
+                <div className="text-xs font-semibold text-black uppercase tracking-wider mb-3">
+                  Heatmap Summary
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-700">Grid Tiles</span>
+                    <span className="text-lg font-bold text-black font-mono">
+                      {tileSummary.totalTiles}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 bg-black rounded"></div>
+                      <span>{tileSummary.riskCounts?.critical || 0} Critical</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 bg-gray-700 rounded"></div>
+                      <span>{tileSummary.riskCounts?.warning || 0} Warning</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 bg-gray-400 rounded"></div>
+                      <span>{tileSummary.riskCounts?.watch || 0} Watch</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 bg-gray-200 rounded"></div>
+                      <span>{tileSummary.riskCounts?.safe || 0} Safe</span>
+                    </div>
+                  </div>
+                  {tileSummary.totalPopulationAtRisk > 0 && (
+                    <div className="pt-2 border-t border-gray-200">
+                      <div className="text-xs text-gray-600">Population at Risk</div>
+                      <div className="text-lg font-bold text-black">
+                        ~{tileSummary.totalPopulationAtRisk.toLocaleString()}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="p-4 bg-gray-50 border border-gray-200 rounded-mono">
+              <div className="text-xs font-semibold text-black uppercase tracking-wider mb-3">
                 Summary
               </div>
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-primary-700">สถานี</span>
-                  <span className="text-lg font-bold text-primary-900 font-mono">
+                  <span className="text-sm text-gray-700">Stations</span>
+                  <span className="text-lg font-bold text-black font-mono">
                     {waterLevels.features?.length || 0}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-primary-700">🔴 วิกฤต</span>
-                  <span className="text-lg font-bold text-red-600 font-mono">
+                  <span className="text-sm text-gray-700">Critical</span>
+                  <span className="text-lg font-bold text-black font-mono">
                     {waterLevels.features?.filter(f => f.properties.risk_level === "critical").length || 0}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-primary-700">🟠 เตือนภัย</span>
-                  <span className="text-lg font-bold text-orange-600 font-mono">
+                  <span className="text-sm text-gray-700">Warning</span>
+                  <span className="text-lg font-bold text-gray-700 font-mono">
                     {waterLevels.features?.filter(f => f.properties.risk_level === "warning").length || 0}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-primary-700">🟡 เฝ้าระวัง</span>
-                  <span className="text-lg font-bold text-yellow-600 font-mono">
+                  <span className="text-sm text-gray-700">Watch</span>
+                  <span className="text-lg font-bold text-gray-500 font-mono">
                     {waterLevels.features?.filter(f => f.properties.risk_level === "watch").length || 0}
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="p-4 bg-green-50 border border-green-200 rounded-mono">
-              <div className="text-xs font-semibold text-green-900 uppercase tracking-wider mb-2">
+            <div className="p-4 bg-gray-50 border border-gray-200 rounded-mono">
+              <div className="text-xs font-semibold text-black uppercase tracking-wider mb-2">
                 Last Update
               </div>
-              <div className="text-sm text-green-700 font-mono">
+              <div className="text-sm text-gray-700 font-mono">
                 {lastUpdate.toLocaleString("th-TH", {
                   dateStyle: "short",
                   timeStyle: "short",
@@ -233,8 +299,8 @@ function MapContent() {
               </div>
             </div>
 
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-mono text-xs text-blue-700">
-              💡 <strong>Tip:</strong> Click on markers for detailed information. Use layer controls to toggle different data views.
+            <div className="p-3 bg-gray-50 border border-gray-200 rounded-mono text-xs text-gray-700">
+              <strong>Tip:</strong> Click on markers for detailed information. Use layer controls to toggle different data views.
             </div>
           </div>
         )}
@@ -253,8 +319,24 @@ function MapContent() {
         <MapView
           basins={basins}
           waterLevels={waterLevels}
+          rivers={rivers}
+          dams={dams}
           selectedBasin={selectedBasin}
           layers={layers}
+        />
+        
+        {/* Tambon Flood Layer */}
+        {layers.tambonFlood && (
+          <TambonFloodLayer
+            visible={layers.tambonFlood}
+            onTambonClick={(tambon) => setSelectedTambon(tambon)}
+          />
+        )}
+        
+        {/* Tambon Detail Panel */}
+        <TambonDetailPanel
+          tambon={selectedTambon}
+          onClose={() => setSelectedTambon(null)}
         />
       </div>
     </div>
@@ -268,7 +350,7 @@ export default function MapPage() {
       <Suspense
         fallback={
           <div className="flex items-center justify-center h-screen">
-            <div className="text-6xl animate-pulse">🗺️</div>
+            <div className="text-6xl animate-pulse font-bold">MAP</div>
           </div>
         }
       >

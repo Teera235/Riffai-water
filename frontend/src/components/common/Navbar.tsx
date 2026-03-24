@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Map, TrendingUp, AlertTriangle, FileText, Droplets } from "lucide-react";
+import { LayoutDashboard, Map, TrendingUp, AlertTriangle, FileText, Droplets, BarChart3 } from "lucide-react";
 
 const navItems = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
   { href: "/map", label: "Map", icon: Map },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/predict", label: "Predict", icon: TrendingUp },
   { href: "/alerts", label: "Alerts", icon: AlertTriangle },
   { href: "/reports", label: "Reports", icon: FileText },

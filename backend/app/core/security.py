@@ -12,18 +12,31 @@ from app.models.database import get_db
 from app.models.models import User
 
 settings = get_settings()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=12, bcrypt__ident="2b")
+# Use bcrypt directly to avoid passlib version detection issues with bcrypt 5.0+
+import bcrypt as _bcrypt
+
 security = HTTPBearer()
 
 ALGORITHM = "HS256"
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    """Hash password using bcrypt directly"""
+    # Truncate to 72 bytes for bcrypt
+    password_bytes = password.encode('utf-8')[:72]
+    salt = _bcrypt.gensalt(rounds=12)
+    hashed = _bcrypt.hashpw(password_bytes, salt)
+    return hashed.decode('utf-8')
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    """Verify password using bcrypt directly"""
+    try:
+        plain_bytes = plain.encode('utf-8')[:72]
+        hashed_bytes = hashed.encode('utf-8')
+        return _bcrypt.checkpw(plain_bytes, hashed_bytes)
+    except Exception:
+        return False
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
