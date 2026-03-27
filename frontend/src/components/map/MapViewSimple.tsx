@@ -15,6 +15,7 @@ import { GeoJSONFeatureCollection } from "@/types";
 import TileHeatmap from "./TileHeatmap";
 import TimelapseHeatmap from "./TimelapseHeatmap";
 import FloodLayerSAR from "./FloodLayerSAR";
+import FoliumFloodProbabilityLayer from "./FoliumFloodProbabilityLayer";
 
 // Fix default icon
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -36,9 +37,19 @@ const RISK_COLORS: Record<string, string> = {
 
 function stationIcon(risk?: string) {
   const color = RISK_COLORS[risk || ""] || "#3b82f6";
-  const size = risk === "critical" ? 18 : risk === "warning" ? 15 : 12;
+  const size = risk === "critical" ? 26 : risk === "warning" ? 24 : 22;
   return L.divIcon({
-    html: `<div style="background:${color};width:${size}px;height:${size}px;border-radius:50%;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3)"></div>`,
+    html: `
+      <div class="map-marker-shell map-marker-water" style="width:${size}px;height:${size}px;background:${color};">
+        <svg viewBox="0 0 24 24" width="${Math.round(size * 0.68)}" height="${Math.round(size * 0.68)}" fill="none" stroke="white" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-label="Water station marker" role="img">
+          <path d="M12 3v16"></path>
+          <path d="M9 8h6"></path>
+          <path d="M9 12h6"></path>
+          <path d="M9 16h6"></path>
+          <path d="M6 21h12"></path>
+        </svg>
+      </div>
+    `,
     iconSize: [size, size],
     className: "",
   });
@@ -67,6 +78,7 @@ interface MapViewProps {
   onwrNationalGeoJSON?: GeoJSONFeatureCollection | null;
   /** Static Folium-export validation points (TP/TN/FP/FN) */
   v3DailyGeoJSON?: GeoJSONFeatureCollection | null;
+  onFoliumFloodLoaded?: (featureCount: number) => void;
   layers: {
     basins: boolean;
     waterLevels: boolean;
@@ -78,6 +90,7 @@ interface MapViewProps {
     heatmap: boolean;
     timelapse: boolean;
     tambonFlood: boolean;
+    foliumFloodProbability: boolean;
     onwrSar: boolean;
     onwrNational: boolean;
     v3DailyValidation: boolean;
@@ -135,6 +148,7 @@ export default function MapViewSimple({
   onwrSarDate,
   onwrNationalGeoJSON,
   v3DailyGeoJSON,
+  onFoliumFloodLoaded,
   layers,
 }: MapViewProps) {
   const flyCenter = selectedBasin ? BASIN_CENTERS[selectedBasin] : undefined;
@@ -142,8 +156,18 @@ export default function MapViewSimple({
 
   // Dam icon
   const damIcon = L.divIcon({
-    html: '<div style="font-size:16px;font-weight:bold;">DAM</div>',
-    iconSize: [30, 20],
+    html: `
+      <div class="map-marker-shell map-marker-dam">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#f8fafc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Dam marker" role="img">
+          <path d="M4 19h16"></path>
+          <path d="M6 19V9l2-4"></path>
+          <path d="M10 19V8l2-3"></path>
+          <path d="M14 19v-8l2-2"></path>
+          <path d="M18 19v-6"></path>
+        </svg>
+      </div>
+    `,
+    iconSize: [24, 24],
     className: "",
   });
 
@@ -350,18 +374,25 @@ export default function MapViewSimple({
           />
         )}
 
+      {layers.foliumFloodProbability && (
+        <FoliumFloodProbabilityLayer
+          visible={layers.foliumFloodProbability}
+          onLoaded={onFoliumFloodLoaded}
+        />
+      )}
+
       {/* Basin boundaries */}
       {layers.basins && basins && (
         <GeoJSON
           data={basins}
           style={(feature) => {
             const isSelected = feature?.properties.id === selectedBasin;
-            const sar = layers.onwrSar;
+            const suppressFill = layers.onwrSar || layers.foliumFloodProbability;
             return {
               color: isSelected ? "#1e40af" : "#3b82f6",
               weight: isSelected ? 3 : 2,
               fillColor: isSelected ? "#3b82f6" : "#60a5fa",
-              fillOpacity: sar
+              fillOpacity: suppressFill
                 ? 0
                 : isSelected
                   ? 0.15
