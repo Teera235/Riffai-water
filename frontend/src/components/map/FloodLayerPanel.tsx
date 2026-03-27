@@ -1,6 +1,7 @@
 "use client";
 
 import { zscoreToColor } from "@/constants/onwrSarZscore";
+import MapHudShell from "@/components/map/ui/MapHudShell";
 
 interface Props {
   dates: string[];
@@ -41,121 +42,85 @@ export default function FloodLayerPanel({
   pipelineBasinLabel = "EastCoast",
 }: Props) {
   return (
-    <div className="absolute top-3 right-3 md:top-4 md:right-4 z-[1000] pointer-events-auto">
-      <div className="w-[min(92vw,320px)] rounded-2xl border border-white/10 bg-slate-950/80 text-slate-100 shadow-mono-lg backdrop-blur p-4 select-none">
-      <div className="flex items-center gap-3 mb-4">
-        <span style={{ fontSize: 22, lineHeight: 1 }} aria-hidden>
-          🛰️
-        </span>
+    <MapHudShell
+      title="SAR Flood Detection"
+      subtitle={`${pipelineBasinLabel} · Sentinel-1 VV Z-score`}
+      position="topRight"
+    >
+      <div className="space-y-3">
         <div>
-          <div className="font-semibold text-sm leading-tight text-slate-100">
-            SAR Flood Detection
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-primary-600 mb-1">
+            Date
           </div>
-          <div className="text-[11px] text-slate-400 mt-0.5">
-            {pipelineBasinLabel} · Sentinel-1 VV Z-score
-          </div>
-        </div>
-      </div>
-
-      <div className="mb-4">
-        <div className="text-[10px] font-semibold tracking-[0.14em] uppercase text-slate-400 mb-1">
-          Date
-        </div>
-        {loadingDates ? (
-          <div className="text-xs text-indigo-300 py-1.5">
-            Loading available dates…
-          </div>
-        ) : dates.length === 0 ? (
-          <div className="text-xs text-red-300">No dates available</div>
-        ) : (
-          <select
-            value={selectedDate ?? ""}
-            onChange={(e) => onDateChange(e.target.value)}
-            className="w-full text-sm rounded-mono border border-indigo-400/40 bg-slate-900/70 text-slate-100 px-3 py-2 outline-none focus:ring-2 focus:ring-white/20"
-          >
-            {[...dates].reverse().map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
-        )}
-      </div>
-
-      {loading && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-mono mb-3 bg-indigo-500/10 border border-indigo-400/20">
-          <span className="text-indigo-300 text-base" aria-hidden>
-            ⟳
-          </span>
-          <span className="text-xs text-indigo-200">Fetching layer…</span>
-        </div>
-      )}
-      {error && !loading && (
-        <div className="px-3 py-2 rounded-mono mb-3 bg-red-500/10 border border-red-400/25 text-xs text-red-200">
-          {error}
-        </div>
-      )}
-
-      {!loading && featureCount != null && (
-        <div className="flex gap-2 mb-4">
-          <div className="flex-1 px-3 py-2 rounded-mono text-center bg-slate-900/60 border border-indigo-400/15">
-            <div className="text-[10px] uppercase tracking-wider text-slate-400">
-              Sub-basins
-            </div>
-            <div className="text-lg font-semibold text-slate-100 mt-0.5 font-mono tabular-nums">
-              {featureCount}
-            </div>
-          </div>
-          <div className="flex-1 px-3 py-2 rounded-mono text-center bg-amber-400/10 border border-amber-300/25">
-            <div className="text-[10px] uppercase tracking-wider text-amber-200">
-              Flooded
-            </div>
-            <div
-              className={[
-                "text-lg font-semibold mt-0.5 font-mono tabular-nums",
-                floodedCount && floodedCount > 0 ? "text-amber-200" : "text-emerald-300",
-              ].join(" ")}
+          {loadingDates ? (
+            <div className="text-xs text-primary-600 py-1">Loading available dates...</div>
+          ) : dates.length === 0 ? (
+            <div className="text-xs text-red-700">No dates available</div>
+          ) : (
+            <select
+              value={selectedDate ?? ""}
+              onChange={(e) => onDateChange(e.target.value)}
+              className="input-mono text-sm"
             >
-              {floodedCount ?? 0}
+              {[...dates].reverse().map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        {loading && (
+          <div className="px-3 py-2 rounded-mono border border-primary-200 bg-primary-50 text-primary-700">
+            Fetching layer...
+          </div>
+        )}
+        {error && !loading && (
+          <div className="px-3 py-2 rounded-mono border border-red-200 bg-red-50 text-red-700">
+            {error}
+          </div>
+        )}
+
+        {!loading && featureCount != null && (
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-mono border border-primary-200 bg-primary-50 px-3 py-2 text-center">
+              <div className="text-[10px] uppercase tracking-wider text-primary-600">Sub-basins</div>
+              <div className="text-lg font-bold font-mono text-primary-900 tabular-nums">{featureCount}</div>
+            </div>
+            <div className="rounded-mono border border-primary-200 bg-primary-50 px-3 py-2 text-center">
+              <div className="text-[10px] uppercase tracking-wider text-primary-600">Flooded</div>
+              <div className="text-lg font-bold font-mono text-primary-900 tabular-nums">{floodedCount ?? 0}</div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <div>
-        <div className="text-[10px] font-semibold tracking-[0.14em] uppercase text-slate-400 mb-2">
-          Z-score Legend
-        </div>
-        <div className="flex flex-col gap-1.5">
-          {SAR_FLOOD_LEGEND_STEPS.map(({ range, label, z }) => (
-            <div key={label} className="flex items-center gap-2.5">
-              <div
-                className="w-[18px] h-[18px] rounded-mono shrink-0 border border-white/15"
-                style={{
-                  background: zscoreToColor(z),
-                  boxShadow: z !== null && z < -3 ? `0 0 6px ${zscoreToColor(z)}88` : undefined,
-                }}
-              />
-              <div className="flex-1 min-w-0">
-                <span className="text-xs font-medium text-slate-200">
-                  {label}
-                </span>
-                <span className="text-[10px] text-slate-500 ml-1.5 font-mono">
-                  {range}
-                </span>
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-primary-600 mb-2">
+            Z-score Legend
+          </div>
+          <div className="space-y-1.5">
+            {SAR_FLOOD_LEGEND_STEPS.map(({ range, label, z }) => (
+              <div key={label} className="flex items-center gap-2">
+                <div
+                  className="w-3.5 h-3.5 rounded-mono shrink-0 border border-primary-300"
+                  style={{ background: zscoreToColor(z) }}
+                />
+                <div className="text-primary-700">
+                  <span className="font-medium text-xs">{label}</span>{" "}
+                  <span className="text-[11px] font-mono text-primary-500">{range}</span>
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+        </div>
+
+        <div className="pt-2 border-t border-primary-200 text-[11px] text-primary-600">
+          Source: ONWR pipeline · GCS bucket <code className="text-primary-900">onwr-data</code>
+          <br />
+          Flood threshold: mean Z-score &lt; −3.0
         </div>
       </div>
-
-      <div className="mt-3 pt-3 border-t border-indigo-400/15 text-[10px] text-slate-500 leading-relaxed">
-        Source: ONWR pipeline · GCS bucket{" "}
-        <code className="text-indigo-200">onwr-data</code>
-        <br />
-        Flood threshold: mean Z-score &lt; −3.0
-      </div>
-      </div>
-    </div>
+    </MapHudShell>
   );
 }

@@ -40,120 +40,101 @@ export default function TambonDetailPanel({ tambon, onClose }: Props) {
   const riskLabel = RISK_LABELS[tambon.risk_level] || tambon.risk_level;
 
   return (
-    <div className="fixed inset-x-3 top-20 bottom-3 md:inset-x-auto md:right-4 md:top-20 md:bottom-4 md:w-96 bg-white rounded-2xl shadow-2xl z-[1001] flex flex-col overflow-hidden">
-      {/* Header */}
-      <div
-        className="p-4 text-white"
-        style={{ backgroundColor: riskColor }}
-      >
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex-1">
-            <h2 className="text-xl font-bold">{riskLabel}</h2>
-            <p className="text-sm opacity-90 mt-1">
-              {tambon.tb_tn}
-            </p>
+    <div className="fixed inset-x-3 top-20 bottom-3 md:inset-x-auto md:right-4 md:top-20 md:bottom-4 md:w-96 bg-white rounded-mono border border-primary-200 shadow-mono-lg z-[1001] flex flex-col overflow-hidden">
+      <div className="p-4 border-b border-primary-200 border-l-4" style={{ borderLeftColor: riskColor }}>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h2 className="text-lg font-bold text-primary-900">{tambon.tb_tn}</h2>
+            <p className="text-xs text-primary-600 font-mono mt-1">Tambon ID: {tambon.tb_idn}</p>
+            <span
+              className="inline-flex mt-2 px-2 py-0.5 rounded-mono text-xs font-semibold text-white"
+              style={{ backgroundColor: riskColor }}
+            >
+              {riskLabel}
+            </span>
           </div>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-white/20 rounded transition-colors"
+            className="h-10 w-10 rounded-mono border border-primary-200 hover:bg-primary-100 transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5 mx-auto" />
           </button>
-        </div>
-        <div className="text-xs opacity-75">
-          Tambon ID: {tambon.tb_idn}
         </div>
       </div>
 
-      {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Location */}
-        <div className="bg-gray-50 rounded-lg p-3">
+        <div className="bg-primary-50 rounded-mono p-3 border border-primary-200">
           <div className="flex items-center gap-2 mb-2">
-            <MapPin className="w-4 h-4 text-gray-600" />
-            <h3 className="font-bold text-sm text-black">Location</h3>
+            <MapPin className="w-4 h-4 text-primary-600" />
+            <h3 className="font-bold text-sm text-primary-900">Location</h3>
           </div>
           <div className="space-y-1 text-sm">
             <div className="flex justify-between">
-              <span className="text-gray-600">Sub-district:</span>
-              <span className="font-medium text-black">{tambon.tb_tn}</span>
+              <span className="text-primary-600">Sub-district:</span>
+              <span className="font-medium text-primary-900">{tambon.tb_tn}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">District:</span>
-              <span className="font-medium text-black">{tambon.ap_tn}</span>
+              <span className="text-primary-600">District:</span>
+              <span className="font-medium text-primary-900">{tambon.ap_tn}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">Province:</span>
-              <span className="font-medium text-black">{tambon.pv_tn}</span>
+              <span className="text-primary-600">Province:</span>
+              <span className="font-medium text-primary-900">{tambon.pv_tn}</span>
             </div>
           </div>
         </div>
 
-        {/* Flood Probability */}
-        <div
-          className="rounded-lg p-4 text-white"
-          style={{ backgroundColor: riskColor }}
-        >
+        <div className="rounded-mono p-4 bg-primary-900 text-white">
           <div className="text-sm opacity-90 mb-2">Annual Flood Probability</div>
-          <div className="text-5xl font-bold mb-2">
-            {tambon.flood_percent.toFixed(1)}%
-          </div>
-          <div className="text-sm opacity-90">
+          <div className="text-5xl font-bold mb-2 font-mono tabular-nums">{tambon.flood_percent.toFixed(1)}%</div>
+          <div className="text-sm opacity-90 font-mono tabular-nums">
             Probability: {tambon.flood_probability.toFixed(4)}
           </div>
         </div>
 
-        {/* Risk Assessment */}
-        <div className="bg-gray-50 rounded-lg p-4">
+        <div className="bg-primary-50 rounded-mono p-4 border border-primary-200">
           <div className="flex items-center gap-2 mb-3">
-            <AlertTriangle className="w-5 h-5 text-orange-600" />
-            <h3 className="font-bold text-sm text-black">Risk Assessment</h3>
+            <AlertTriangle className="w-5 h-5 text-primary-700" />
+            <h3 className="font-bold text-sm text-primary-900">Risk Assessment</h3>
           </div>
-
           <div className="space-y-3">
-            {/* Risk Level */}
             <div>
-              <div className="text-xs text-gray-600 mb-1">Risk Level</div>
+              <div className="text-xs text-primary-600 mb-1">Risk Level</div>
               <div
-                className="inline-block px-3 py-1 rounded-full text-sm font-bold text-white"
+                className="inline-block px-3 py-1 rounded-mono text-sm font-bold text-white"
                 style={{ backgroundColor: riskColor }}
               >
                 {riskLabel}
               </div>
             </div>
-
-            {/* Interpretation */}
             <div>
-              <div className="text-xs text-gray-600 mb-1">Interpretation</div>
-              <div className="text-sm text-gray-700">
+              <div className="text-xs text-primary-600 mb-1">Interpretation</div>
+              <div className="text-sm text-primary-700">
                 {tambon.flood_probability >= 0.8 && (
                   <>
-                    This area has a <strong>very high likelihood</strong> of experiencing
-                    flooding this year. Immediate preparedness measures are recommended.
+                    This area has a <strong>very high likelihood</strong> of experiencing flooding this year. Immediate
+                    preparedness measures are recommended.
                   </>
                 )}
                 {tambon.flood_probability >= 0.6 && tambon.flood_probability < 0.8 && (
                   <>
-                    This area has a <strong>high likelihood</strong> of flooding.
-                    Monitor conditions closely and prepare emergency plans.
+                    This area has a <strong>high likelihood</strong> of flooding. Monitor conditions closely and prepare
+                    emergency plans.
                   </>
                 )}
                 {tambon.flood_probability >= 0.4 && tambon.flood_probability < 0.6 && (
                   <>
-                    This area has a <strong>moderate risk</strong> of flooding.
-                    Stay informed and be prepared.
+                    This area has a <strong>moderate risk</strong> of flooding. Stay informed and be prepared.
                   </>
                 )}
                 {tambon.flood_probability >= 0.2 && tambon.flood_probability < 0.4 && (
                   <>
-                    This area has a <strong>low risk</strong> of flooding.
-                    Normal monitoring is sufficient.
+                    This area has a <strong>low risk</strong> of flooding. Normal monitoring is sufficient.
                   </>
                 )}
                 {tambon.flood_probability < 0.2 && (
                   <>
-                    This area has a <strong>very low risk</strong> of flooding.
-                    Minimal concern for this year.
+                    This area has a <strong>very low risk</strong> of flooding. Minimal concern for this year.
                   </>
                 )}
               </div>
@@ -161,11 +142,10 @@ export default function TambonDetailPanel({ tambon, onClose }: Props) {
           </div>
         </div>
 
-        {/* Recommendations */}
         {tambon.flood_probability >= 0.6 && (
-          <div className="bg-orange-50 border-2 border-orange-200 rounded-lg p-4">
-            <div className="font-bold text-orange-900 mb-2">Recommendations</div>
-            <ul className="text-sm text-orange-700 space-y-1">
+          <div className="bg-primary-50 border border-primary-200 rounded-mono p-4">
+            <div className="font-bold text-primary-900 mb-2">Recommendations</div>
+            <ul className="text-sm text-primary-700 space-y-1">
               <li>• Monitor weather forecasts and water levels</li>
               <li>• Prepare emergency evacuation plan</li>
               <li>• Move valuables to higher ground</li>
@@ -175,41 +155,38 @@ export default function TambonDetailPanel({ tambon, onClose }: Props) {
           </div>
         )}
 
-        {/* Model Information */}
-        <div className="bg-gray-50 rounded-lg p-4">
+        <div className="bg-primary-50 rounded-mono p-4 border border-primary-200">
           <div className="flex items-center gap-2 mb-3">
-            <TrendingUp className="w-5 h-5 text-blue-600" />
-            <h3 className="font-bold text-sm text-black">Model Information</h3>
+            <TrendingUp className="w-5 h-5 text-primary-700" />
+            <h3 className="font-bold text-sm text-primary-900">Model Information</h3>
           </div>
-
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-gray-600">Model:</span>
-              <span className="font-medium text-black">XGBoost V2</span>
+              <span className="text-primary-600">Model:</span>
+              <span className="font-medium text-primary-900">XGBoost V2</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">Accuracy:</span>
-              <span className="font-medium text-black">83%</span>
+              <span className="text-primary-600">Accuracy:</span>
+              <span className="font-medium text-primary-900 font-mono tabular-nums">83%</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">AUC-ROC:</span>
-              <span className="font-medium text-black">0.9131</span>
+              <span className="text-primary-600">AUC-ROC:</span>
+              <span className="font-medium text-primary-900 font-mono tabular-nums">0.9131</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">Training Period:</span>
-              <span className="font-medium text-black">2011-2024</span>
+              <span className="text-primary-600">Training Period:</span>
+              <span className="font-medium text-primary-900">2011-2024</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">Features:</span>
-              <span className="font-medium text-black">19 variables</span>
+              <span className="text-primary-600">Features:</span>
+              <span className="font-medium text-primary-900">19 variables</span>
             </div>
           </div>
         </div>
 
-        {/* Data Sources */}
-        <div className="bg-gray-50 rounded-lg p-4">
-          <h3 className="font-bold text-sm text-black mb-2">Data Sources</h3>
-          <div className="space-y-1 text-xs text-gray-600">
+        <div className="bg-primary-50 rounded-mono p-4 border border-primary-200">
+          <h3 className="font-bold text-sm text-primary-900 mb-2">Data Sources</h3>
+          <div className="space-y-1 text-xs text-primary-600">
             <div>• Sentinel-2 Optical Imagery (NDVI, NDWI, NDMI)</div>
             <div>• Sentinel-1 SAR (VV, VH polarization)</div>
             <div>• ERA5-Land Climate Data (rainfall, temperature)</div>
@@ -219,11 +196,8 @@ export default function TambonDetailPanel({ tambon, onClose }: Props) {
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="p-3 border-t bg-gray-50">
-        <div className="text-xs text-gray-500 text-center">
-          Prediction updated daily at 06:00 AM Bangkok time
-        </div>
+      <div className="p-3 border-t border-primary-200 bg-primary-50">
+        <div className="text-xs text-primary-600 text-center">Prediction updated daily at 06:00 AM Bangkok time</div>
       </div>
     </div>
   );

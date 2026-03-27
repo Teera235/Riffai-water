@@ -3,21 +3,21 @@
 import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
-import { Loader2 } from "lucide-react";
+import { Layers, Loader2, RefreshCw } from "lucide-react";
 import Navbar from "@/components/common/Navbar";
 import { mapAPI, onwrAPI, pipelineAPI } from "@/services/api";
 import { GeoJSONFeatureCollection } from "@/types";
 import toast from "react-hot-toast";
 import TambonFloodLayer from "@/components/map/TambonFloodLayer";
-import MapInspector from "@/components/map/MapInspector";
 import { useRouter } from "next/navigation";
 import { APP_TO_ONWR_BASIN } from "@/constants/onwrBasins";
 import { useFloodLayer } from "@/hooks/useFloodLayer";
-import FloodLayerPanel, { SAR_FLOOD_LEGEND_STEPS } from "@/components/map/FloodLayerPanel";
+import FloodLayerPanel from "@/components/map/FloodLayerPanel";
 import FloodV3ValidationLegend from "@/components/map/FloodV3ValidationLegend";
-import { zscoreToColor } from "@/constants/onwrSarZscore";
-import MapCommandBar from "@/components/map/MapCommandBar";
-import MapLayersPanel from "@/components/map/MapLayersPanel";
+import TambonFloodMapLegend from "@/components/map/TambonFloodMapLegend";
+import MapDrawer from "@/components/map/ui/MapDrawer";
+import LayerToggleRow from "@/components/map/ui/LayerToggleRow";
+import TambonDetailPanel from "@/components/map/TambonDetailPanel";
 
 const MapView = dynamic(() => import("@/components/map/MapViewSimple"), {
   ssr: false,
@@ -31,7 +31,7 @@ const MapView = dynamic(() => import("@/components/map/MapViewSimple"), {
 function MapContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const searchRef = useRef<HTMLInputElement | null>(null);
+  const basinSelectRef = useRef<HTMLSelectElement | null>(null);
   const [basins, setBasins] = useState<GeoJSONFeatureCollection | null>(null);
   const [waterLevels, setWaterLevels] = useState<GeoJSONFeatureCollection | null>(null);
   const [rivers, setRivers] = useState<GeoJSONFeatureCollection | null>(null);
@@ -85,9 +85,9 @@ function MapContent() {
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [selectedTambon, setSelectedTambon] = useState<any>(null);
-  const [layersOpen, setLayersOpen] = useState(false);
-  const [searchScope, setSearchScope] = useState<"basin" | "subbasin">("basin");
-  const [searchValue, setSearchValue] = useState("");
+  const [drawerOpen, setDrawerOpen] = useState(true);
+  const [subbasinsLoading, setSubbasinsLoading] = useState(false);
+  const [needsBasinForSar, setNeedsBasinForSar] = useState(false);
 
   const loadMapData = async () => {
     try {
@@ -253,13 +253,17 @@ function MapContent() {
       if (!selectedBasin) {
         setSubbasins(null);
         setSelectedSubbasin(null);
+        setSubbasinsLoading(false);
         return;
       }
+      setSubbasinsLoading(true);
       try {
         const res = await mapAPI.subbasins(selectedBasin);
         setSubbasins(res.data);
-      } catch (e) {
+      } catch {
         setSubbasins(null);
+      } finally {
+        setSubbasinsLoading(false);
       }
     };
     loadSub();
@@ -279,11 +283,18 @@ function MapContent() {
 
   const toggle = (key: keyof typeof layers) => {
     if (key === "onwrSar" && !selectedBasin) {
+      setDrawerOpen(true);
+      setNeedsBasinForSar(true);
+      setTimeout(() => basinSelectRef.current?.focus(), 50);
       toast.error("เลือกลุ่มน้ำก่อนเปิดชั้นข้อมูล SAR");
       return;
     }
     setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
   };
+
+  useEffect(() => {
+    if (selectedBasin) setNeedsBasinForSar(false);
+  }, [selectedBasin]);
 
   const exportOnwrCsv = () => {
     if (!onwrFc?.features?.length) return;
@@ -311,36 +322,6 @@ function MapContent() {
     URL.revokeObjectURL(a.href);
   };
 
-  // Keyboard shortcuts: / focuses search, L toggles layers, Esc closes panels
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      const isTyping =
-        target?.tagName === "INPUT" ||
-        target?.tagName === "TEXTAREA" ||
-        target?.tagName === "SELECT" ||
-        (target as any)?.isContentEditable;
-
-      if (!isTyping && e.key === "/") {
-        e.preventDefault();
-        setLayersOpen(false);
-        searchRef.current?.focus();
-        return;
-      }
-      if (!isTyping && (e.key === "l" || e.key === "L")) {
-        e.preventDefault();
-        setLayersOpen((v) => !v);
-        return;
-      }
-      if (e.key === "Escape") {
-        setLayersOpen(false);
-        setSelectedTambon(null);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
-
   return (
     <div className="relative h-[calc(100vh-4rem)] bg-gray-50">
       <div className="absolute inset-0">
@@ -366,43 +347,145 @@ function MapContent() {
           </div>
         )}
 
-        <MapCommandBar
-          basins={basins}
-          subbasins={subbasins}
-          selectedBasin={selectedBasin}
-          selectedSubbasin={selectedSubbasin}
-          onSelectBasin={setSelectedBasin}
-          onSelectSubbasin={setSelectedSubbasin}
-          onOpenLayers={() => setLayersOpen(true)}
-          onRefresh={refreshData}
-          searchValue={searchValue}
-          onSearchValueChange={setSearchValue}
-          searchScope={searchScope}
-          onSearchScopeChange={(s) => {
-            setSearchScope(s);
-            setSearchValue("");
-          }}
-          searchInputRef={searchRef}
-        />
+        <MapDrawer
+          title="Map View"
+          subtitle="Basin → sub-basin → data layers"
+          open={drawerOpen}
+          onToggle={() => setDrawerOpen((v) => !v)}
+        >
+          <section className="space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-primary-600">Location</h3>
+            <div>
+              <label className="block text-xs font-semibold text-primary-600 uppercase tracking-wider mb-2">
+                Select Basin
+              </label>
+              <select
+                ref={basinSelectRef}
+                value={selectedBasin || ""}
+                onChange={(e) => setSelectedBasin(e.target.value || null)}
+                className="input-mono text-sm"
+              >
+                <option value="">All Basins</option>
+                {(basins?.features || []).map((f: any) => (
+                  <option key={f.properties.id} value={f.properties.id}>
+                    {f.properties.name || f.properties.id}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-primary-600 uppercase tracking-wider mb-2">
+                Select Sub-basin
+              </label>
+              <select
+                value={selectedSubbasin || ""}
+                onChange={(e) => setSelectedSubbasin(e.target.value || null)}
+                className="input-mono text-sm"
+                disabled={!selectedBasin || !subbasins}
+              >
+                <option value="">
+                  {subbasinsLoading ? "Loading Sub-basins..." : "All Sub-basins"}
+                </option>
+                {(subbasins?.features || []).map((f: any, idx: number) => (
+                  <option
+                    key={f.properties.subbasin_id || f.properties.id || idx}
+                    value={f.properties.subbasin_id || f.properties.id || String(idx)}
+                  >
+                    {f.properties.name || f.properties.subbasin_id || f.properties.id || `subbasin-${idx + 1}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {needsBasinForSar && (
+              <div className="rounded-mono border border-primary-200 bg-primary-50 px-3 py-2 text-xs text-primary-700">
+                Choose a basin first to enable SAR sub-basin analysis.
+              </div>
+            )}
+          </section>
 
-        <MapLayersPanel
-          open={layersOpen}
-          onClose={() => setLayersOpen(false)}
-          layers={layers as any}
-          toggle={toggle as any}
-          selectedBasin={selectedBasin}
-          onwrSarEnabled={layers.onwrSar}
-          onwrDates={onwrDates}
-          onwrDate={onwrDate}
-          onSetOnwrDate={setOnwrDate}
-          onExportOnwrCsv={exportOnwrCsv}
-          onwrHasFeatures={Boolean(onwrFc?.features?.length)}
-          onwrAlerts={onwrAlerts}
-          tileSummary={tileSummary}
-          waterLevels={waterLevels}
-          lastUpdate={lastUpdate}
-        />
+          <section className="space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-primary-600 flex items-center gap-2">
+              <Layers className="w-4 h-4" />
+              Data Layers
+            </h3>
+            <div className="space-y-2">
+              {[
+                { key: "heatmap" as const, label: "Flood Risk Heatmap", description: "Grid-based risk visualization" },
+                { key: "onwrSar" as const, label: "ONWR SAR sub-basin (Z-score)", description: "Sentinel-1 zonal stats — HydroBASIN Lev09" },
+                { key: "tambonFlood" as const, label: "Tambon Flood Prediction", description: "XGBoost AI model (6,363 tambons)" },
+                { key: "v3DailyValidation" as const, label: "V3 daily validation", description: "Static test-set snapshot — TP/TN/FP/FN" },
+                { key: "timelapse" as const, label: "Time-lapse Animation", description: "Historical playback (7 days)" },
+                { key: "basins" as const, label: "Basin Boundaries", description: "Administrative boundaries" },
+                { key: "rivers" as const, label: "Rivers", description: "Major river systems" },
+                { key: "dams" as const, label: "Dams & Reservoirs", description: "Water management infrastructure" },
+                { key: "waterLevels" as const, label: "Water Levels", description: "Current station readings" },
+                { key: "floodDepth" as const, label: "Flood Depth", description: "Predicted inundation depth" },
+                { key: "rainfall" as const, label: "Rainfall Data", description: "Precipitation measurements" },
+                { key: "satellite" as const, label: "Satellite Imagery", description: "Sentinel-1/2 imagery" },
+              ].map(({ key, label, description }) => (
+                <LayerToggleRow
+                  key={key}
+                  checked={layers[key]}
+                  onToggle={() => toggle(key)}
+                  label={label}
+                  description={description}
+                  disabled={key === "onwrSar" && !selectedBasin}
+                  disabledReason={key === "onwrSar" && !selectedBasin ? "Select basin first" : undefined}
+                />
+              ))}
+            </div>
+          </section>
 
+          {layers.onwrSar && selectedBasin && (
+            <section className="space-y-2 p-3 border border-primary-200 bg-primary-50 rounded-mono">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-primary-700">
+                ONWR date (≈6-day SAR cadence)
+              </h3>
+              <select
+                value={onwrDate || ""}
+                onChange={(e) => setOnwrDate(e.target.value)}
+                className="input-mono text-sm"
+                disabled={!onwrDates.length}
+              >
+                {onwrDates.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+              {onwrFc && (
+                <button type="button" onClick={exportOnwrCsv} className="w-full btn-mono-outline text-xs py-2">
+                  Download sub-basin CSV
+                </button>
+              )}
+            </section>
+          )}
+
+          <section className="space-y-3">
+            <button onClick={refreshData} className="w-full btn-mono text-sm flex items-center justify-center gap-2">
+              <RefreshCw className="w-4 h-4" />
+              Refresh Data
+            </button>
+            {waterLevels && (
+              <div className="p-3 rounded-mono border border-primary-200 bg-primary-50">
+                <div className="text-xs font-semibold text-primary-700 uppercase tracking-wider mb-2">Summary</div>
+                <div className="space-y-1 text-sm text-primary-700">
+                  <div className="flex justify-between"><span>Stations</span><strong className="font-mono tabular-nums">{waterLevels.features?.length || 0}</strong></div>
+                  <div className="flex justify-between"><span>Critical</span><strong className="font-mono tabular-nums">{waterLevels.features?.filter(f => f.properties.risk_level === "critical").length || 0}</strong></div>
+                  <div className="flex justify-between"><span>Warning</span><strong className="font-mono tabular-nums">{waterLevels.features?.filter(f => f.properties.risk_level === "warning").length || 0}</strong></div>
+                  <div className="flex justify-between"><span>Watch</span><strong className="font-mono tabular-nums">{waterLevels.features?.filter(f => f.properties.risk_level === "watch").length || 0}</strong></div>
+                </div>
+                <div className="mt-2 text-xs text-primary-600 font-mono">
+                  Last update: {lastUpdate.toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" })}
+                </div>
+              </div>
+            )}
+          </section>
+        </MapDrawer>
+
+        {layers.tambonFlood && (
+          <TambonFloodMapLegend loading={false} error={null} stats={null} featureCount={undefined} />
+        )}
         {layers.v3DailyValidation && (
           <FloodV3ValidationLegend
             featureCount={v3DailyFc?.features?.length}
@@ -437,7 +520,7 @@ function MapContent() {
           />
         )}
         
-        <MapInspector tambon={selectedTambon} onClose={() => setSelectedTambon(null)} />
+        <TambonDetailPanel tambon={selectedTambon} onClose={() => setSelectedTambon(null)} />
       </div>
     </div>
   );

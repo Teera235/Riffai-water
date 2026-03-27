@@ -152,7 +152,7 @@ export default function MapViewSimple({
       center={[13.7, 100.5]}
       zoom={6}
       style={{ height: "100%", width: "100%" }}
-      className="rounded-lg shadow-lg"
+      className="rounded-mono shadow-mono-lg"
     >
       {layers.onwrSar ? (
         <>
