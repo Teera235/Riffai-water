@@ -1,6 +1,5 @@
 "use client";
 
-import type { CSSProperties } from "react";
 import { zscoreToColor } from "@/constants/onwrSarZscore";
 
 interface Props {
@@ -41,84 +40,38 @@ export default function FloodLayerPanel({
   floodedCount,
   pipelineBasinLabel = "EastCoast",
 }: Props) {
-  const panelStyle: CSSProperties = {
-    position: "absolute",
-    top: 16,
-    right: 16,
-    zIndex: 1000,
-    background: "rgba(15,23,42,0.93)",
-    backdropFilter: "blur(14px)",
-    WebkitBackdropFilter: "blur(14px)",
-    borderRadius: 14,
-    padding: "16px 18px",
-    minWidth: 248,
-    maxWidth: 284,
-    boxShadow: "0 8px 40px rgba(0,0,0,0.55)",
-    color: "#f1f5f9",
-    fontFamily: "'Inter', system-ui, sans-serif",
-    fontSize: 13,
-    border: "1px solid rgba(99,102,241,0.3)",
-    userSelect: "none",
-  };
-
   return (
-    <div style={panelStyle}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+    <div className="absolute top-3 right-3 md:top-4 md:right-4 z-[1000] pointer-events-auto">
+      <div className="w-[min(92vw,320px)] rounded-2xl border border-white/10 bg-slate-950/80 text-slate-100 shadow-mono-lg backdrop-blur p-4 select-none">
+      <div className="flex items-center gap-3 mb-4">
         <span style={{ fontSize: 22, lineHeight: 1 }} aria-hidden>
           🛰️
         </span>
         <div>
-          <div
-            style={{
-              fontWeight: 700,
-              fontSize: 14,
-              color: "#e2e8f0",
-              lineHeight: 1.2,
-            }}
-          >
+          <div className="font-semibold text-sm leading-tight text-slate-100">
             SAR Flood Detection
           </div>
-          <div style={{ color: "#64748b", fontSize: 11, marginTop: 2 }}>
+          <div className="text-[11px] text-slate-400 mt-0.5">
             {pipelineBasinLabel} · Sentinel-1 VV Z-score
           </div>
         </div>
       </div>
 
-      <div style={{ marginBottom: 14 }}>
-        <div
-          style={{
-            color: "#64748b",
-            fontSize: 10,
-            fontWeight: 700,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            marginBottom: 5,
-          }}
-        >
+      <div className="mb-4">
+        <div className="text-[10px] font-semibold tracking-[0.14em] uppercase text-slate-400 mb-1">
           Date
         </div>
         {loadingDates ? (
-          <div style={{ color: "#818cf8", fontSize: 12, padding: "6px 0" }}>
+          <div className="text-xs text-indigo-300 py-1.5">
             Loading available dates…
           </div>
         ) : dates.length === 0 ? (
-          <div style={{ color: "#f87171", fontSize: 12 }}>No dates available</div>
+          <div className="text-xs text-red-300">No dates available</div>
         ) : (
           <select
             value={selectedDate ?? ""}
             onChange={(e) => onDateChange(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "7px 10px",
-              borderRadius: 8,
-              background: "rgba(30,41,59,0.95)",
-              color: "#e2e8f0",
-              border: "1px solid rgba(99,102,241,0.45)",
-              fontSize: 13,
-              outline: "none",
-              cursor: "pointer",
-              appearance: "auto",
-            }}
+            className="w-full text-sm rounded-mono border border-indigo-400/40 bg-slate-900/70 text-slate-100 px-3 py-2 outline-none focus:ring-2 focus:ring-white/20"
           >
             {[...dates].reverse().map((d) => (
               <option key={d} value={d}>
@@ -130,107 +83,38 @@ export default function FloodLayerPanel({
       </div>
 
       {loading && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 7,
-            padding: "7px 11px",
-            borderRadius: 8,
-            marginBottom: 12,
-            background: "rgba(99,102,241,0.12)",
-            border: "1px solid rgba(99,102,241,0.25)",
-          }}
-        >
-          <span style={{ color: "#818cf8", fontSize: 15 }} aria-hidden>
+        <div className="flex items-center gap-2 px-3 py-2 rounded-mono mb-3 bg-indigo-500/10 border border-indigo-400/20">
+          <span className="text-indigo-300 text-base" aria-hidden>
             ⟳
           </span>
-          <span style={{ color: "#a5b4fc", fontSize: 12 }}>Fetching layer…</span>
+          <span className="text-xs text-indigo-200">Fetching layer…</span>
         </div>
       )}
       {error && !loading && (
-        <div
-          style={{
-            padding: "7px 11px",
-            borderRadius: 8,
-            marginBottom: 12,
-            background: "rgba(239,68,68,0.1)",
-            border: "1px solid rgba(239,68,68,0.3)",
-            color: "#fca5a5",
-            fontSize: 12,
-          }}
-        >
+        <div className="px-3 py-2 rounded-mono mb-3 bg-red-500/10 border border-red-400/25 text-xs text-red-200">
           {error}
         </div>
       )}
 
       {!loading && featureCount != null && (
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            marginBottom: 14,
-          }}
-        >
-          <div
-            style={{
-              flex: 1,
-              padding: "7px 10px",
-              borderRadius: 8,
-              textAlign: "center",
-              background: "rgba(30,41,59,0.8)",
-              border: "1px solid rgba(99,102,241,0.2)",
-            }}
-          >
-            <div
-              style={{
-                color: "#94a3b8",
-                fontSize: 10,
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-              }}
-            >
+        <div className="flex gap-2 mb-4">
+          <div className="flex-1 px-3 py-2 rounded-mono text-center bg-slate-900/60 border border-indigo-400/15">
+            <div className="text-[10px] uppercase tracking-wider text-slate-400">
               Sub-basins
             </div>
-            <div
-              style={{
-                color: "#e2e8f0",
-                fontWeight: 700,
-                fontSize: 18,
-                marginTop: 2,
-              }}
-            >
+            <div className="text-lg font-semibold text-slate-100 mt-0.5 font-mono tabular-nums">
               {featureCount}
             </div>
           </div>
-          <div
-            style={{
-              flex: 1,
-              padding: "7px 10px",
-              borderRadius: 8,
-              textAlign: "center",
-              background: "rgba(250,204,21,0.08)",
-              border: "1px solid rgba(250,204,21,0.3)",
-            }}
-          >
-            <div
-              style={{
-                color: "#fde68a",
-                fontSize: 10,
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-              }}
-            >
+          <div className="flex-1 px-3 py-2 rounded-mono text-center bg-amber-400/10 border border-amber-300/25">
+            <div className="text-[10px] uppercase tracking-wider text-amber-200">
               Flooded
             </div>
             <div
-              style={{
-                color:
-                  floodedCount && floodedCount > 0 ? "#facc15" : "#22c55e",
-                fontWeight: 700,
-                fontSize: 18,
-                marginTop: 2,
-              }}
+              className={[
+                "text-lg font-semibold mt-0.5 font-mono tabular-nums",
+                floodedCount && floodedCount > 0 ? "text-amber-200" : "text-emerald-300",
+              ].join(" ")}
             >
               {floodedCount ?? 0}
             </div>
@@ -239,40 +123,24 @@ export default function FloodLayerPanel({
       )}
 
       <div>
-        <div
-          style={{
-            color: "#64748b",
-            fontSize: 10,
-            fontWeight: 700,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            marginBottom: 8,
-          }}
-        >
+        <div className="text-[10px] font-semibold tracking-[0.14em] uppercase text-slate-400 mb-2">
           Z-score Legend
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+        <div className="flex flex-col gap-1.5">
           {SAR_FLOOD_LEGEND_STEPS.map(({ range, label, z }) => (
-            <div key={label} style={{ display: "flex", alignItems: "center", gap: 9 }}>
+            <div key={label} className="flex items-center gap-2.5">
               <div
+                className="w-[18px] h-[18px] rounded-mono shrink-0 border border-white/15"
                 style={{
-                  width: 18,
-                  height: 18,
-                  borderRadius: 4,
-                  flexShrink: 0,
                   background: zscoreToColor(z),
-                  border: "1px solid rgba(255,255,255,0.15)",
-                  boxShadow:
-                    z !== null && z < -3
-                      ? `0 0 6px ${zscoreToColor(z)}88`
-                      : undefined,
+                  boxShadow: z !== null && z < -3 ? `0 0 6px ${zscoreToColor(z)}88` : undefined,
                 }}
               />
-              <div style={{ flex: 1 }}>
-                <span style={{ color: "#cbd5e1", fontWeight: 600, fontSize: 12 }}>
+              <div className="flex-1 min-w-0">
+                <span className="text-xs font-medium text-slate-200">
                   {label}
                 </span>
-                <span style={{ color: "#475569", fontSize: 10, marginLeft: 5 }}>
+                <span className="text-[10px] text-slate-500 ml-1.5 font-mono">
                   {range}
                 </span>
               </div>
@@ -281,20 +149,12 @@ export default function FloodLayerPanel({
         </div>
       </div>
 
-      <div
-        style={{
-          marginTop: 12,
-          paddingTop: 10,
-          borderTop: "1px solid rgba(99,102,241,0.15)",
-          color: "#475569",
-          fontSize: 10,
-          lineHeight: 1.5,
-        }}
-      >
+      <div className="mt-3 pt-3 border-t border-indigo-400/15 text-[10px] text-slate-500 leading-relaxed">
         Source: ONWR pipeline · GCS bucket{" "}
-        <code style={{ color: "#818cf8" }}>onwr-data</code>
+        <code className="text-indigo-200">onwr-data</code>
         <br />
         Flood threshold: mean Z-score &lt; −3.0
+      </div>
       </div>
     </div>
   );

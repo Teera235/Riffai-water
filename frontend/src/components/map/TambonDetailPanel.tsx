@@ -40,7 +40,7 @@ export default function TambonDetailPanel({ tambon, onClose }: Props) {
   const riskLabel = RISK_LABELS[tambon.risk_level] || tambon.risk_level;
 
   return (
-    <div className="fixed right-4 top-20 bottom-4 w-96 bg-white rounded-lg shadow-2xl z-[1001] flex flex-col overflow-hidden">
+    <div className="fixed inset-x-3 top-20 bottom-3 md:inset-x-auto md:right-4 md:top-20 md:bottom-4 md:w-96 bg-white rounded-2xl shadow-2xl z-[1001] flex flex-col overflow-hidden">
       {/* Header */}
       <div
         className="p-4 text-white"
