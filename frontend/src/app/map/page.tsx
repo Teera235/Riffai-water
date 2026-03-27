@@ -15,6 +15,7 @@ import { useFloodLayer } from "@/hooks/useFloodLayer";
 import FloodLayerPanel from "@/components/map/FloodLayerPanel";
 import FloodV3ValidationLegend from "@/components/map/FloodV3ValidationLegend";
 import TambonFloodMapLegend from "@/components/map/TambonFloodMapLegend";
+import FoliumFloodLegend from "../../components/map/FoliumFloodLegend";
 import MapDrawer from "@/components/map/ui/MapDrawer";
 import LayerToggleRow from "@/components/map/ui/LayerToggleRow";
 import TambonDetailPanel from "@/components/map/TambonDetailPanel";
@@ -56,10 +57,12 @@ function MapContent() {
     heatmap: true,
     timelapse: false,
     tambonFlood: false,
+    foliumFloodProbability: false,
     onwrSar: false,
     onwrNational: false,
     v3DailyValidation: false,
   });
+  const [foliumFloodFeatureCount, setFoliumFloodFeatureCount] = useState<number | null>(null);
   const {
     geojson: onwrFc,
     dates: onwrDates,
@@ -336,6 +339,7 @@ function MapContent() {
           onwrSarDate={onwrDate}
           onwrNationalGeoJSON={onwrNationalFiltered}
           v3DailyGeoJSON={v3DailyFc}
+          onFoliumFloodLoaded={(count) => setFoliumFloodFeatureCount(count)}
           layers={layers}
         />
 
@@ -414,6 +418,11 @@ function MapContent() {
                 { key: "heatmap" as const, label: "Flood Risk Heatmap", description: "Grid-based risk visualization" },
                 { key: "onwrSar" as const, label: "ONWR SAR sub-basin (Z-score)", description: "Sentinel-1 zonal stats — HydroBASIN Lev09" },
                 { key: "tambonFlood" as const, label: "Tambon Flood Prediction", description: "XGBoost AI model (6,363 tambons)" },
+                {
+                  key: "foliumFloodProbability" as const,
+                  label: "Folium Flood Probability (Tambon polygons)",
+                  description: "Standalone high-contrast polygon layer",
+                },
                 { key: "v3DailyValidation" as const, label: "V3 daily validation", description: "Static test-set snapshot — TP/TN/FP/FN" },
                 { key: "timelapse" as const, label: "Time-lapse Animation", description: "Historical playback (7 days)" },
                 { key: "basins" as const, label: "Basin Boundaries", description: "Administrative boundaries" },
@@ -474,6 +483,9 @@ function MapContent() {
 
         {layers.tambonFlood && (
           <TambonFloodMapLegend loading={false} error={null} stats={null} featureCount={undefined} />
+        )}
+        {layers.foliumFloodProbability && (
+          <FoliumFloodLegend featureCount={foliumFloodFeatureCount ?? undefined} />
         )}
         {layers.v3DailyValidation && (
           <FloodV3ValidationLegend

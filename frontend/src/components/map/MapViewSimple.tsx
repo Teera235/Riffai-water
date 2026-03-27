@@ -15,6 +15,7 @@ import { GeoJSONFeatureCollection } from "@/types";
 import TileHeatmap from "./TileHeatmap";
 import TimelapseHeatmap from "./TimelapseHeatmap";
 import FloodLayerSAR from "./FloodLayerSAR";
+import FoliumFloodProbabilityLayer from "./FoliumFloodProbabilityLayer";
 
 // Fix default icon
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -67,6 +68,7 @@ interface MapViewProps {
   onwrNationalGeoJSON?: GeoJSONFeatureCollection | null;
   /** Static Folium-export validation points (TP/TN/FP/FN) */
   v3DailyGeoJSON?: GeoJSONFeatureCollection | null;
+  onFoliumFloodLoaded?: (featureCount: number) => void;
   layers: {
     basins: boolean;
     waterLevels: boolean;
@@ -78,6 +80,7 @@ interface MapViewProps {
     heatmap: boolean;
     timelapse: boolean;
     tambonFlood: boolean;
+    foliumFloodProbability: boolean;
     onwrSar: boolean;
     onwrNational: boolean;
     v3DailyValidation: boolean;
@@ -135,6 +138,7 @@ export default function MapViewSimple({
   onwrSarDate,
   onwrNationalGeoJSON,
   v3DailyGeoJSON,
+  onFoliumFloodLoaded,
   layers,
 }: MapViewProps) {
   const flyCenter = selectedBasin ? BASIN_CENTERS[selectedBasin] : undefined;
@@ -350,18 +354,25 @@ export default function MapViewSimple({
           />
         )}
 
+      {layers.foliumFloodProbability && (
+        <FoliumFloodProbabilityLayer
+          visible={layers.foliumFloodProbability}
+          onLoaded={onFoliumFloodLoaded}
+        />
+      )}
+
       {/* Basin boundaries */}
       {layers.basins && basins && (
         <GeoJSON
           data={basins}
           style={(feature) => {
             const isSelected = feature?.properties.id === selectedBasin;
-            const sar = layers.onwrSar;
+            const suppressFill = layers.onwrSar || layers.foliumFloodProbability;
             return {
               color: isSelected ? "#1e40af" : "#3b82f6",
               weight: isSelected ? 3 : 2,
               fillColor: isSelected ? "#3b82f6" : "#60a5fa",
-              fillOpacity: sar
+              fillOpacity: suppressFill
                 ? 0
                 : isSelected
                   ? 0.15
