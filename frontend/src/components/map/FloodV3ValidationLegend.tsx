@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import MapHudShell from "@/components/map/ui/MapHudShell";
 
 export const V3_CONFUSION_COLORS: { key: string; label: string; hex: string }[] = [
   { key: "TP", label: "True positive", hex: "#2ecc71" },
@@ -20,79 +20,43 @@ export default function FloodV3ValidationLegend({
   loading,
   error,
 }: Props) {
-  const panelStyle: CSSProperties = {
-    position: "absolute",
-    bottom: 16,
-    left: 16,
-    zIndex: 1000,
-    background: "rgba(15,23,42,0.93)",
-    backdropFilter: "blur(14px)",
-    WebkitBackdropFilter: "blur(14px)",
-    borderRadius: 14,
-    padding: "14px 16px",
-    minWidth: 240,
-    maxWidth: 300,
-    boxShadow: "0 8px 40px rgba(0,0,0,0.55)",
-    color: "#f1f5f9",
-    fontFamily: "system-ui, sans-serif",
-    fontSize: 12,
-    border: "1px solid rgba(99,102,241,0.3)",
-    userSelect: "none",
-  };
-
   return (
-    <div style={panelStyle}>
-      <div style={{ fontWeight: 700, fontSize: 13, color: "#e2e8f0", marginBottom: 8 }}>
-        V3 daily validation
-      </div>
-      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.45, marginBottom: 10 }}>
+    <MapHudShell
+      title="V3 Daily Validation"
+      subtitle="Static confusion snapshot (TP/TN/FP/FN)"
+      position="bottomLeft"
+      dense
+    >
+      <div className="text-[11px] text-primary-600 leading-relaxed mb-2 font-mono tabular-nums">
         CV AUC 0.9609 · TB AUC 0.9973 · threshold 0.2
       </div>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: "6px 12px",
-          fontSize: 11,
-          marginBottom: 10,
-          fontFamily: "ui-monospace, monospace",
-        }}
-      >
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] mb-2 font-mono tabular-nums text-primary-700">
         <span>TP 213</span>
         <span>FN 8</span>
         <span>FP 46</span>
         <span>TN 6096</span>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div className="space-y-1.5">
         {V3_CONFUSION_COLORS.map(({ key, label, hex }) => (
-          <div key={key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span
-              style={{
-                width: 10,
-                height: 10,
-                borderRadius: 999,
-                background: hex,
-                flexShrink: 0,
-                boxShadow: "0 0 0 1px rgba(255,255,255,0.2)",
-              }}
-            />
-            <span style={{ color: "#cbd5e1" }}>
-              <strong style={{ color: "#f8fafc" }}>{key}</strong> · {label}
+          <div key={key} className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full border border-primary-300 shrink-0" style={{ background: hex }} />
+            <span className="text-primary-700">
+              <strong className="text-primary-900 font-mono">{key}</strong> · {label}
             </span>
           </div>
         ))}
       </div>
       {loading && (
-        <div style={{ marginTop: 8, fontSize: 11, color: "#94a3b8" }}>Loading points…</div>
+        <div className="mt-2 text-[11px] text-primary-600">Loading points...</div>
       )}
       {error && (
-        <div style={{ marginTop: 8, fontSize: 11, color: "#fca5a5" }}>{error}</div>
+        <div className="mt-2 text-[11px] text-red-700">{error}</div>
       )}
       {featureCount != null && !loading && !error && (
-        <div style={{ marginTop: 8, fontSize: 11, color: "#94a3b8" }}>
+        <div className="mt-2 text-[11px] text-primary-600 font-mono tabular-nums">
           {featureCount.toLocaleString()} tambon points
         </div>
       )}
-    </div>
+    </MapHudShell>
   );
 }

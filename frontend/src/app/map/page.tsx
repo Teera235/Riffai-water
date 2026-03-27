@@ -1,21 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useState, Suspense } from "react";
+import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
-import { Map as MapIcon, Layers, RefreshCw, Loader2 } from "lucide-react";
+import { Layers, Loader2 } from "lucide-react";
 import Navbar from "@/components/common/Navbar";
 import { mapAPI, onwrAPI, pipelineAPI } from "@/services/api";
 import { GeoJSONFeatureCollection } from "@/types";
 import toast from "react-hot-toast";
 import TambonFloodLayer from "@/components/map/TambonFloodLayer";
-import TambonDetailPanel from "@/components/map/TambonDetailPanel";
 import { useRouter } from "next/navigation";
 import { APP_TO_ONWR_BASIN } from "@/constants/onwrBasins";
 import { useFloodLayer } from "@/hooks/useFloodLayer";
-import FloodLayerPanel, { SAR_FLOOD_LEGEND_STEPS } from "@/components/map/FloodLayerPanel";
+import FloodLayerPanel from "@/components/map/FloodLayerPanel";
 import FloodV3ValidationLegend from "@/components/map/FloodV3ValidationLegend";
-import { zscoreToColor } from "@/constants/onwrSarZscore";
+import TambonFloodMapLegend from "@/components/map/TambonFloodMapLegend";
+import MapDrawer from "@/components/map/ui/MapDrawer";
+import LayerToggleRow from "@/components/map/ui/LayerToggleRow";
+import TambonDetailPanel from "@/components/map/TambonDetailPanel";
+import MapOperationsSummary from "@/components/map/MapOperationsSummary";
 
 const MapView = dynamic(() => import("@/components/map/MapViewSimple"), {
   ssr: false,
@@ -29,6 +32,7 @@ const MapView = dynamic(() => import("@/components/map/MapViewSimple"), {
 function MapContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const basinSelectRef = useRef<HTMLSelectElement | null>(null);
   const [basins, setBasins] = useState<GeoJSONFeatureCollection | null>(null);
   const [waterLevels, setWaterLevels] = useState<GeoJSONFeatureCollection | null>(null);
   const [rivers, setRivers] = useState<GeoJSONFeatureCollection | null>(null);
@@ -82,6 +86,9 @@ function MapContent() {
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [selectedTambon, setSelectedTambon] = useState<any>(null);
+  const [drawerOpen, setDrawerOpen] = useState(true);
+  const [subbasinsLoading, setSubbasinsLoading] = useState(false);
+  const [needsBasinForSar, setNeedsBasinForSar] = useState(false);
 
   const loadMapData = async () => {
     try {
@@ -105,6 +112,34 @@ function MapContent() {
       setLoading(false);
     }
   };
+
+  // Load persisted layer preferences
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("riffai.map.layers.v1");
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      setLayers((prev) => {
+        const next = { ...prev };
+        for (const k of Object.keys(prev)) {
+          if (typeof parsed[k] === "boolean") (next as any)[k] = parsed[k];
+        }
+        return next;
+      });
+    } catch {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist layer preferences
+  useEffect(() => {
+    try {
+      localStorage.setItem("riffai.map.layers.v1", JSON.stringify(layers));
+    } catch {
+      // ignore
+    }
+  }, [layers]);
 
   useEffect(() => {
     loadMapData();
@@ -219,13 +254,17 @@ function MapContent() {
       if (!selectedBasin) {
         setSubbasins(null);
         setSelectedSubbasin(null);
+        setSubbasinsLoading(false);
         return;
       }
+      setSubbasinsLoading(true);
       try {
         const res = await mapAPI.subbasins(selectedBasin);
         setSubbasins(res.data);
-      } catch (e) {
+      } catch {
         setSubbasins(null);
+      } finally {
+        setSubbasinsLoading(false);
       }
     };
     loadSub();
@@ -245,11 +284,18 @@ function MapContent() {
 
   const toggle = (key: keyof typeof layers) => {
     if (key === "onwrSar" && !selectedBasin) {
+      setDrawerOpen(true);
+      setNeedsBasinForSar(true);
+      setTimeout(() => basinSelectRef.current?.focus(), 50);
       toast.error("เลือกลุ่มน้ำก่อนเปิดชั้นข้อมูล SAR");
       return;
     }
     setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
   };
+
+  useEffect(() => {
+    if (selectedBasin) setNeedsBasinForSar(false);
+  }, [selectedBasin]);
 
   const exportOnwrCsv = () => {
     if (!onwrFc?.features?.length) return;
@@ -278,352 +324,8 @@ function MapContent() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-4rem)]">
-      {/* Sidebar */}
-      <div className="w-80 bg-white border-r-2 border-primary-200 p-6 overflow-y-auto">
-        <h2 className="text-2xl font-bold mb-6 text-primary-900 tracking-tight flex items-center gap-2">
-          <MapIcon className="w-6 h-6" />
-          Map View
-        </h2>
-
-        {/* Basin select */}
-        <div className="mb-6">
-          <label className="block text-xs font-semibold text-primary-600 uppercase tracking-wider mb-2">
-            Select Basin
-          </label>
-          <select
-            value={selectedBasin || ""}
-            onChange={(e) => setSelectedBasin(e.target.value || null)}
-            className="input-mono text-sm"
-          >
-            <option value="">All Basins</option>
-            {(basins?.features || []).map((f: any) => (
-              <option key={f.properties.id} value={f.properties.id}>
-                {f.properties.name || f.properties.id}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Sub-basin select */}
-        <div className="mb-6">
-          <label className="block text-xs font-semibold text-primary-600 uppercase tracking-wider mb-2">
-            Select Sub-basin
-          </label>
-          <select
-            value={selectedSubbasin || ""}
-            onChange={(e) => setSelectedSubbasin(e.target.value || null)}
-            className="input-mono text-sm"
-            disabled={!selectedBasin || !subbasins}
-          >
-            <option value="">All Sub-basins</option>
-            {(subbasins?.features || []).map((f: any, idx: number) => (
-              <option
-                key={f.properties.subbasin_id || f.properties.id || idx}
-                value={f.properties.subbasin_id || f.properties.id || String(idx)}
-              >
-                {f.properties.name || f.properties.subbasin_id || f.properties.id || `subbasin-${idx + 1}`}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Layers */}
-        <div className="mb-6">
-          <h3 className="text-xs font-semibold text-primary-600 uppercase tracking-wider mb-3 flex items-center gap-2">
-            <Layers className="w-4 h-4" />
-            Data Layers
-          </h3>
-          <div className="space-y-2">
-            {[
-              { key: "heatmap" as const, label: "Flood Risk Heatmap", description: "Grid-based risk visualization" },
-              { key: "onwrSar" as const, label: "ONWR SAR sub-basin (Z-score)", description: "Sentinel-1 zonal stats — HydroBASIN Lev09" },
-              { key: "tambonFlood" as const, label: "Tambon Flood Prediction", description: "XGBoost AI model (6,363 tambons)" },
-              {
-                key: "v3DailyValidation" as const,
-                label: "V3 daily validation (TP/TN/FP/FN)",
-                description: "Static test-set snapshot — 6,363 tambon markers",
-              },
-              { key: "timelapse" as const, label: "Time-lapse Animation", description: "Historical playback (7 days)" },
-              { key: "basins" as const, label: "Basin Boundaries", description: "Administrative boundaries" },
-              { key: "rivers" as const, label: "Rivers", description: "Major river systems" },
-              { key: "dams" as const, label: "Dams & Reservoirs", description: "Water management infrastructure" },
-              { key: "waterLevels" as const, label: "Water Levels", description: "Current station readings" },
-              { key: "floodDepth" as const, label: "Flood Depth", description: "Predicted inundation depth" },
-              { key: "rainfall" as const, label: "Rainfall Data", description: "Precipitation measurements" },
-              { key: "satellite" as const, label: "Satellite Imagery", description: "Sentinel-1/2 imagery" },
-            ].map(({ key, label, description }) => (
-              <label
-                key={key}
-                className="flex items-start gap-3 p-3 hover:bg-primary-50 rounded-mono cursor-pointer transition-colors border border-transparent hover:border-primary-200"
-              >
-                <input
-                  type="checkbox"
-                  checked={layers[key]}
-                  onChange={() => toggle(key)}
-                  className="mt-0.5 w-4 h-4 rounded-mono border-primary-300 text-primary-900 focus:ring-primary-900"
-                />
-                <div className="flex-1">
-                  <div className="text-sm font-medium text-primary-900">{label}</div>
-                  <div className="text-xs text-primary-500 font-mono mt-0.5">{description}</div>
-                </div>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {layers.onwrSar && selectedBasin && (
-          <div className="mb-6 p-3 bg-sky-50 border border-sky-200 rounded-mono space-y-2">
-            <div className="text-xs font-semibold text-sky-900 uppercase tracking-wider">
-              ONWR date (≈6-day SAR cadence)
-            </div>
-            <select
-              value={onwrDate || ""}
-              onChange={(e) => setOnwrDate(e.target.value || null)}
-              className="input-mono text-sm w-full"
-              disabled={!onwrDates.length}
-            >
-              {onwrDates.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-            {onwrFc && (
-              <button
-                type="button"
-                onClick={exportOnwrCsv}
-                className="w-full text-xs py-2 rounded-mono border border-sky-300 bg-white hover:bg-sky-100 text-sky-900 font-medium"
-              >
-                Download sub-basin CSV
-              </button>
-            )}
-          </div>
-        )}
-
-        <div className="mb-6">
-          <h3 className="text-xs font-semibold text-primary-600 uppercase tracking-wider mb-2">
-            SAR flood anomalies (latest pass)
-          </h3>
-          <div className="max-h-48 overflow-y-auto space-y-1 text-xs border border-primary-100 rounded-mono p-2 bg-primary-50/50">
-            {onwrAlerts.length === 0 ? (
-              <span className="text-primary-500">No sub-basin alerts or data not loaded.</span>
-            ) : (
-              onwrAlerts.slice(0, 40).map((a, i) => (
-                <div
-                  key={`${a.HYBAS_ID}-${a.date}-${i}`}
-                  className="flex justify-between gap-2 py-1 border-b border-primary-100 last:border-0"
-                >
-                  <span className="truncate text-primary-800">
-                    {a.name || `HYBAS ${a.HYBAS_ID}`}
-                    <span className="text-primary-500 font-mono ml-1">{a.pipeline_basin}</span>
-                  </span>
-                  <span className="font-mono shrink-0 text-red-700">
-                    z={a.mean_z_score?.toFixed(2)}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Legend */}
-        <div className="mb-6">
-          <h3 className="text-xs font-semibold text-primary-600 uppercase tracking-wider mb-3">
-            Legend
-          </h3>
-          
-          {/* Water Level Status */}
-          <div className="mb-4">
-            <div className="text-xs font-medium text-primary-700 mb-2">Water Level Status</div>
-            <div className="space-y-2">
-              {[
-                { color: "bg-primary-300", label: "Normal", range: "< 3.0 m" },
-                { color: "bg-primary-500", label: "Watch", range: "3.0 - 4.0 m" },
-                { color: "bg-primary-700", label: "Warning", range: "4.0 - 4.5 m" },
-                { color: "bg-primary-900", label: "Critical", range: "> 4.5 m" },
-              ].map(({ color, label, range }) => (
-                <div key={label} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-3 h-3 ${color}`} />
-                    <span className="text-xs text-primary-700 font-medium">{label}</span>
-                  </div>
-                  <span className="text-xs text-primary-500 font-mono">{range}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Flood Depth (if enabled) */}
-          {(layers.onwrSar || layers.onwrNational) && (
-            <div className="mb-4 p-3 bg-sky-50 border border-sky-200 rounded-mono">
-              <div className="text-xs font-medium text-sky-900 mb-2">
-                {layers.onwrSar ? "SAR Z-score (VV) — sub-basin" : "ONWR Z-score (national)"}
-              </div>
-              <div className="space-y-1.5 text-[11px] text-sky-800">
-                {layers.onwrSar
-                  ? SAR_FLOOD_LEGEND_STEPS.map(({ range, label, z }) => (
-                      <div key={label} className="flex items-center gap-2">
-                        <div
-                          className="w-8 h-3 rounded shrink-0 border border-sky-300"
-                          style={{ background: zscoreToColor(z) }}
-                        />
-                        <span>
-                          <span className="font-medium">{label}</span>{" "}
-                          <span className="text-sky-600 font-mono">{range}</span>
-                        </span>
-                      </div>
-                    ))
-                  : [
-                      { c: "#1e40af", label: "Low z (wet / flood signal, z ≤ −3)" },
-                      { c: "#facc15", label: "Near baseline (~0)" },
-                      { c: "#b91c1c", label: "High z (dry, z > 3)" },
-                    ].map(({ c, label }) => (
-                      <div key={label} className="flex items-center gap-2">
-                        <div className="w-8 h-3 rounded" style={{ background: c }} />
-                        <span>{label}</span>
-                      </div>
-                    ))}
-              </div>
-            </div>
-          )}
-
-          {layers.floodDepth && (
-            <div className="mb-4 p-3 bg-primary-50 border border-primary-200 rounded-mono">
-              <div className="text-xs font-medium text-primary-700 mb-2">Flood Depth</div>
-              <div className="space-y-1.5">
-                {[
-                  { color: "bg-primary-900", label: "2.5 m" },
-                  { color: "bg-primary-600", label: "1.5 m" },
-                  { color: "bg-primary-300", label: "0.5 m" },
-                  { color: "bg-primary-100", label: "0 m" },
-                ].map(({ color, label }) => (
-                  <div key={label} className="flex items-center gap-2">
-                    <div className={`w-3 h-3 ${color}`} />
-                    <span className="text-xs text-primary-700 font-mono">{label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Refresh */}
-        <button
-          onClick={refreshData}
-          className="w-full btn-mono text-sm flex items-center justify-center gap-2"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Refresh Data
-        </button>
-
-        {/* Stats */}
-        {waterLevels && (
-          <div className="mt-6 space-y-3">
-            {/* Tile Heatmap Summary */}
-            {layers.heatmap && tileSummary && (
-              <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-mono">
-                <div className="text-xs font-semibold text-black uppercase tracking-wider mb-3">
-                  Heatmap Summary
-                </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-700">Grid Tiles</span>
-                    <span className="text-lg font-bold text-black font-mono">
-                      {tileSummary.totalTiles}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="flex items-center gap-1">
-                      <div className="w-3 h-3 bg-black rounded"></div>
-                      <span>{tileSummary.riskCounts?.critical || 0} Critical</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <div className="w-3 h-3 bg-gray-700 rounded"></div>
-                      <span>{tileSummary.riskCounts?.warning || 0} Warning</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <div className="w-3 h-3 bg-gray-400 rounded"></div>
-                      <span>{tileSummary.riskCounts?.watch || 0} Watch</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <div className="w-3 h-3 bg-gray-200 rounded"></div>
-                      <span>{tileSummary.riskCounts?.safe || 0} Safe</span>
-                    </div>
-                  </div>
-                  {tileSummary.totalPopulationAtRisk > 0 && (
-                    <div className="pt-2 border-t border-gray-200">
-                      <div className="text-xs text-gray-600">Population at Risk</div>
-                      <div className="text-lg font-bold text-black">
-                        ~{tileSummary.totalPopulationAtRisk.toLocaleString()}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            <div className="p-4 bg-gray-50 border border-gray-200 rounded-mono">
-              <div className="text-xs font-semibold text-black uppercase tracking-wider mb-3">
-                Summary
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-700">Stations</span>
-                  <span className="text-lg font-bold text-black font-mono">
-                    {waterLevels.features?.length || 0}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-700">Critical</span>
-                  <span className="text-lg font-bold text-black font-mono">
-                    {waterLevels.features?.filter(f => f.properties.risk_level === "critical").length || 0}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-700">Warning</span>
-                  <span className="text-lg font-bold text-gray-700 font-mono">
-                    {waterLevels.features?.filter(f => f.properties.risk_level === "warning").length || 0}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-700">Watch</span>
-                  <span className="text-lg font-bold text-gray-500 font-mono">
-                    {waterLevels.features?.filter(f => f.properties.risk_level === "watch").length || 0}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-4 bg-gray-50 border border-gray-200 rounded-mono">
-              <div className="text-xs font-semibold text-black uppercase tracking-wider mb-2">
-                Last Update
-              </div>
-              <div className="text-sm text-gray-700 font-mono">
-                {lastUpdate.toLocaleString("th-TH", {
-                  dateStyle: "short",
-                  timeStyle: "short",
-                })}
-              </div>
-            </div>
-
-            <div className="p-3 bg-gray-50 border border-gray-200 rounded-mono text-xs text-gray-700">
-              <strong>Tip:</strong> Click on markers for detailed information. Use layer controls to toggle different data views.
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Map */}
-      <div className="flex-1 p-4 relative bg-primary-50">
-        {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-white rounded-mono z-10 m-4">
-            <div className="text-center">
-              <Loader2 className="w-12 h-12 text-primary-400 animate-spin mx-auto mb-3" />
-              <div className="text-sm text-primary-600 font-medium">Loading map data...</div>
-            </div>
-          </div>
-        )}
+    <div className="relative h-[calc(100vh-4rem)] bg-gray-50">
+      <div className="absolute inset-0">
         <MapView
           basins={basins}
           waterLevels={waterLevels}
@@ -637,6 +339,142 @@ function MapContent() {
           layers={layers}
         />
 
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-white/85 backdrop-blur rounded-mono z-[1050] m-3 md:m-4">
+            <div className="text-center">
+              <Loader2 className="w-12 h-12 text-gray-700 animate-spin mx-auto mb-3" />
+              <div className="text-sm text-gray-700 font-medium">Loading map data…</div>
+            </div>
+          </div>
+        )}
+
+        <MapDrawer
+          title="Map View"
+          subtitle="Basin → sub-basin → data layers"
+          open={drawerOpen}
+          onToggle={() => setDrawerOpen((v) => !v)}
+        >
+          <section className="space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-primary-600">Location</h3>
+            <div>
+              <label className="block text-xs font-semibold text-primary-600 uppercase tracking-wider mb-2">
+                Select Basin
+              </label>
+              <select
+                ref={basinSelectRef}
+                value={selectedBasin || ""}
+                onChange={(e) => setSelectedBasin(e.target.value || null)}
+                className="input-mono text-sm"
+              >
+                <option value="">All Basins</option>
+                {(basins?.features || []).map((f: any) => (
+                  <option key={f.properties.id} value={f.properties.id}>
+                    {f.properties.name || f.properties.id}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-primary-600 uppercase tracking-wider mb-2">
+                Select Sub-basin
+              </label>
+              <select
+                value={selectedSubbasin || ""}
+                onChange={(e) => setSelectedSubbasin(e.target.value || null)}
+                className="input-mono text-sm"
+                disabled={!selectedBasin || !subbasins}
+              >
+                <option value="">
+                  {subbasinsLoading ? "Loading Sub-basins..." : "All Sub-basins"}
+                </option>
+                {(subbasins?.features || []).map((f: any, idx: number) => (
+                  <option
+                    key={f.properties.subbasin_id || f.properties.id || idx}
+                    value={f.properties.subbasin_id || f.properties.id || String(idx)}
+                  >
+                    {f.properties.name || f.properties.subbasin_id || f.properties.id || `subbasin-${idx + 1}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {needsBasinForSar && (
+              <div className="rounded-mono border border-primary-200 bg-primary-50 px-3 py-2 text-xs text-primary-700">
+                Choose a basin first to enable SAR sub-basin analysis.
+              </div>
+            )}
+          </section>
+
+          <section className="space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-primary-600 flex items-center gap-2">
+              <Layers className="w-4 h-4" />
+              Data Layers
+            </h3>
+            <div className="space-y-2">
+              {[
+                { key: "heatmap" as const, label: "Flood Risk Heatmap", description: "Grid-based risk visualization" },
+                { key: "onwrSar" as const, label: "ONWR SAR sub-basin (Z-score)", description: "Sentinel-1 zonal stats — HydroBASIN Lev09" },
+                { key: "tambonFlood" as const, label: "Tambon Flood Prediction", description: "XGBoost AI model (6,363 tambons)" },
+                { key: "v3DailyValidation" as const, label: "V3 daily validation", description: "Static test-set snapshot — TP/TN/FP/FN" },
+                { key: "timelapse" as const, label: "Time-lapse Animation", description: "Historical playback (7 days)" },
+                { key: "basins" as const, label: "Basin Boundaries", description: "Administrative boundaries" },
+                { key: "rivers" as const, label: "Rivers", description: "Major river systems" },
+                { key: "dams" as const, label: "Dams & Reservoirs", description: "Water management infrastructure" },
+                { key: "waterLevels" as const, label: "Water Levels", description: "Current station readings" },
+                { key: "floodDepth" as const, label: "Flood Depth", description: "Predicted inundation depth" },
+                { key: "rainfall" as const, label: "Rainfall Data", description: "Precipitation measurements" },
+                { key: "satellite" as const, label: "Satellite Imagery", description: "Sentinel-1/2 imagery" },
+              ].map(({ key, label, description }) => (
+                <LayerToggleRow
+                  key={key}
+                  checked={layers[key]}
+                  onToggle={() => toggle(key)}
+                  label={label}
+                  description={description}
+                  disabled={key === "onwrSar" && !selectedBasin}
+                  disabledReason={key === "onwrSar" && !selectedBasin ? "Select basin first" : undefined}
+                />
+              ))}
+            </div>
+          </section>
+
+          {layers.onwrSar && selectedBasin && (
+            <section className="space-y-2 p-3 border border-primary-200 bg-primary-50 rounded-mono">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-primary-700">
+                ONWR date (≈6-day SAR cadence)
+              </h3>
+              <select
+                value={onwrDate || ""}
+                onChange={(e) => setOnwrDate(e.target.value)}
+                className="input-mono text-sm"
+                disabled={!onwrDates.length}
+              >
+                {onwrDates.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+              {onwrFc && (
+                <button type="button" onClick={exportOnwrCsv} className="w-full btn-mono-outline text-xs py-2">
+                  Download sub-basin CSV
+                </button>
+              )}
+            </section>
+          )}
+
+          <MapOperationsSummary
+            onwrAlerts={onwrAlerts}
+            tileSummary={tileSummary}
+            waterLevels={waterLevels}
+            lastUpdate={lastUpdate}
+            onRefresh={refreshData}
+            loading={loading}
+          />
+        </MapDrawer>
+
+        {layers.tambonFlood && (
+          <TambonFloodMapLegend loading={false} error={null} stats={null} featureCount={undefined} />
+        )}
         {layers.v3DailyValidation && (
           <FloodV3ValidationLegend
             featureCount={v3DailyFc?.features?.length}
@@ -671,11 +509,7 @@ function MapContent() {
           />
         )}
         
-        {/* Tambon Detail Panel */}
-        <TambonDetailPanel
-          tambon={selectedTambon}
-          onClose={() => setSelectedTambon(null)}
-        />
+        <TambonDetailPanel tambon={selectedTambon} onClose={() => setSelectedTambon(null)} />
       </div>
     </div>
   );
