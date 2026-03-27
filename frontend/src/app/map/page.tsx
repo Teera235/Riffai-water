@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import { APP_TO_ONWR_BASIN } from "@/constants/onwrBasins";
 import { useFloodLayer } from "@/hooks/useFloodLayer";
 import FloodLayerPanel, { SAR_FLOOD_LEGEND_STEPS } from "@/components/map/FloodLayerPanel";
+import FloodV3ValidationLegend from "@/components/map/FloodV3ValidationLegend";
 import { zscoreToColor } from "@/lib/onwrSarZscore";
 
 const MapView = dynamic(() => import("@/components/map/MapViewSimple"), {
@@ -53,6 +54,7 @@ function MapContent() {
     tambonFlood: false,
     onwrSar: false,
     onwrNational: false,
+    v3DailyValidation: false,
   });
   const {
     geojson: onwrFc,
@@ -64,6 +66,9 @@ function MapContent() {
     error: sarError,
   } = useFloodLayer(layers.onwrSar ? selectedBasin : null, layers.onwrSar);
   const [onwrNationalFc, setOnwrNationalFc] = useState<GeoJSONFeatureCollection | null>(null);
+  const [v3DailyFc, setV3DailyFc] = useState<GeoJSONFeatureCollection | null>(null);
+  const [v3DailyLoading, setV3DailyLoading] = useState(false);
+  const [v3DailyError, setV3DailyError] = useState<string | null>(null);
   const [onwrAlerts, setOnwrAlerts] = useState<
     {
       pipeline_basin: string;
@@ -163,6 +168,36 @@ function MapContent() {
       cancelled = true;
     };
   }, [layers.onwrNational]);
+
+  useEffect(() => {
+    if (!layers.v3DailyValidation) {
+      setV3DailyFc(null);
+      setV3DailyError(null);
+      return;
+    }
+    let cancelled = false;
+    setV3DailyLoading(true);
+    setV3DailyError(null);
+    (async () => {
+      try {
+        const res = await fetch("/geojson/flood_v3_daily_validation.geojson");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = (await res.json()) as GeoJSONFeatureCollection;
+        if (!cancelled) setV3DailyFc(json);
+      } catch {
+        if (!cancelled) {
+          setV3DailyFc(null);
+          setV3DailyError("Could not load V3 validation GeoJSON");
+          toast.error("โหลดชั้น V3 daily validation ไม่สำเร็จ");
+        }
+      } finally {
+        if (!cancelled) setV3DailyLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [layers.v3DailyValidation]);
 
   const onwrNationalFiltered = useMemo(() => {
     if (!onwrNationalFc?.features?.length) return null;
@@ -304,6 +339,11 @@ function MapContent() {
               { key: "heatmap" as const, label: "Flood Risk Heatmap", description: "Grid-based risk visualization" },
               { key: "onwrSar" as const, label: "ONWR SAR sub-basin (Z-score)", description: "Sentinel-1 zonal stats — HydroBASIN Lev09" },
               { key: "tambonFlood" as const, label: "Tambon Flood Prediction", description: "XGBoost AI model (6,363 tambons)" },
+              {
+                key: "v3DailyValidation" as const,
+                label: "V3 daily validation (TP/TN/FP/FN)",
+                description: "Static test-set snapshot — 6,363 tambon markers",
+              },
               { key: "timelapse" as const, label: "Time-lapse Animation", description: "Historical playback (7 days)" },
               { key: "basins" as const, label: "Basin Boundaries", description: "Administrative boundaries" },
               { key: "rivers" as const, label: "Rivers", description: "Major river systems" },
@@ -593,8 +633,17 @@ function MapContent() {
           onwrSarGeoJSON={onwrFc}
           onwrSarDate={onwrDate}
           onwrNationalGeoJSON={onwrNationalFiltered}
+          v3DailyGeoJSON={v3DailyFc}
           layers={layers}
         />
+
+        {layers.v3DailyValidation && (
+          <FloodV3ValidationLegend
+            featureCount={v3DailyFc?.features?.length}
+            loading={v3DailyLoading}
+            error={v3DailyError}
+          />
+        )}
 
         {layers.onwrSar && selectedBasin && (
           <FloodLayerPanel

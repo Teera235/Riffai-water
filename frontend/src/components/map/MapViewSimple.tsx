@@ -65,6 +65,8 @@ interface MapViewProps {
   onwrSarDate?: string | null;
   /** National aggregate from GCS thailand_subbasin_stats.geojson (optional; may be filtered client-side) */
   onwrNationalGeoJSON?: GeoJSONFeatureCollection | null;
+  /** Static Folium-export validation points (TP/TN/FP/FN) */
+  v3DailyGeoJSON?: GeoJSONFeatureCollection | null;
   layers: {
     basins: boolean;
     waterLevels: boolean;
@@ -78,6 +80,7 @@ interface MapViewProps {
     tambonFlood: boolean;
     onwrSar: boolean;
     onwrNational: boolean;
+    v3DailyValidation: boolean;
   };
 }
 
@@ -129,7 +132,9 @@ export default function MapViewSimple({
   dams,
   selectedBasin,
   onwrSarGeoJSON,
+  onwrSarDate,
   onwrNationalGeoJSON,
+  v3DailyGeoJSON,
   layers,
 }: MapViewProps) {
   const flyCenter = selectedBasin ? BASIN_CENTERS[selectedBasin] : undefined;
@@ -318,6 +323,32 @@ export default function MapViewSimple({
           }
         />
       )}
+
+      {layers.v3DailyValidation &&
+        v3DailyGeoJSON &&
+        v3DailyGeoJSON.features?.length > 0 && (
+          <GeoJSON
+            key={`v3-daily-${v3DailyGeoJSON.features.length}`}
+            data={v3DailyGeoJSON}
+            pointToLayer={(feature, latlng) => {
+              const p = (feature.properties || {}) as Record<string, unknown>;
+              const fill = String(p.fill ?? "#94a3b8");
+              return L.circleMarker(latlng, {
+                radius: 3,
+                color: fill,
+                weight: 0.5,
+                fillColor: fill,
+                fillOpacity: 0.8,
+                opacity: 1,
+              });
+            }}
+            onEachFeature={(feature, layer) => {
+              const p = (feature.properties || {}) as Record<string, unknown>;
+              const label = String(p.label ?? "");
+              if (label) layer.bindTooltip(label, { sticky: true, direction: "top", opacity: 0.95 });
+            }}
+          />
+        )}
 
       {/* Basin boundaries */}
       {layers.basins && basins && (
