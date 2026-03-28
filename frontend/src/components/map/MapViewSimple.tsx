@@ -10,10 +10,13 @@ import {
   useMap,
 } from "react-leaflet";
 import L from "leaflet";
+import type { Layer } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { GeoJSONFeatureCollection } from "@/types";
 import TileHeatmap from "./TileHeatmap";
 import TimelapseHeatmap from "./TimelapseHeatmap";
+import FloodLayerSAR from "./FloodLayerSAR";
+import FoliumFloodProbabilityLayer from "./FoliumFloodProbabilityLayer";
 
 // Fix default icon
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -35,9 +38,19 @@ const RISK_COLORS: Record<string, string> = {
 
 function stationIcon(risk?: string) {
   const color = RISK_COLORS[risk || ""] || "#3b82f6";
-  const size = risk === "critical" ? 18 : risk === "warning" ? 15 : 12;
+  const size = risk === "critical" ? 26 : risk === "warning" ? 24 : 22;
   return L.divIcon({
-    html: `<div style="background:${color};width:${size}px;height:${size}px;border-radius:50%;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3)"></div>`,
+    html: `
+      <div class="map-marker-shell map-marker-water" style="width:${size}px;height:${size}px;background:${color};">
+        <svg viewBox="0 0 24 24" width="${Math.round(size * 0.68)}" height="${Math.round(size * 0.68)}" fill="none" stroke="white" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-label="Water station marker" role="img">
+          <path d="M12 3v16"></path>
+          <path d="M9 8h6"></path>
+          <path d="M9 12h6"></path>
+          <path d="M9 16h6"></path>
+          <path d="M6 21h12"></path>
+        </svg>
+      </div>
+    `,
     iconSize: [size, size],
     className: "",
   });
@@ -53,13 +66,84 @@ function FlyTo({ center, zoom }: { center?: [number, number]; zoom?: number }) {
   return null;
 }
 
+function OnwrTiffBasemapLayer({
+  visible,
+  url,
+  opacity = 0.9,
+}: {
+  visible: boolean;
+  url: string;
+  opacity?: number;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!visible) return;
+
+    let cancelled = false;
+    let rasterLayer: Layer | null = null;
+
+    (async () => {
+      try {
+        const [{ default: parseGeoraster }, { default: GeoRasterLayer }] = await Promise.all([
+          import("georaster"),
+          import("georaster-layer-for-leaflet"),
+        ]);
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const arrayBuffer = await response.arrayBuffer();
+        const georaster = await parseGeoraster(arrayBuffer);
+        if (cancelled) return;
+
+        const layer = new GeoRasterLayer({
+          georaster,
+          opacity,
+          resolution: 256,
+        }) as Layer & { getBounds?: () => L.LatLngBounds };
+        layer.addTo(map);
+        rasterLayer = layer;
+
+        const bounds = layer.getBounds?.();
+        if (bounds?.isValid?.()) {
+          map.fitBounds(bounds, {
+            padding: [24, 24],
+            animate: false,
+          });
+        }
+      } catch (error) {
+        console.error("Failed to load ONWR TIFF basemap:", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (rasterLayer) {
+        map.removeLayer(rasterLayer);
+      }
+    };
+  }, [map, opacity, visible, url]);
+
+  return null;
+}
+
 interface MapViewProps {
   basins?: GeoJSONFeatureCollection | null;
   waterLevels?: GeoJSONFeatureCollection | null;
   rivers?: GeoJSONFeatureCollection | null;
   dams?: GeoJSONFeatureCollection | null;
   selectedBasin?: string | null;
+  onwrSarGeoJSON?: GeoJSONFeatureCollection | null;
+  /** Active SAR stats date (YYYY-MM-DD); used for popups / layer key */
+  onwrSarDate?: string | null;
+  /** National aggregate from GCS thailand_subbasin_stats.geojson (optional; may be filtered client-side) */
+  onwrNationalGeoJSON?: GeoJSONFeatureCollection | null;
+  /** Static Folium-export validation points (TP/TN/FP/FN) */
+  v3DailyGeoJSON?: GeoJSONFeatureCollection | null;
+  onFoliumFloodLoaded?: (featureCount: number) => void;
   layers: {
+    osmBasemap: boolean;
+    esriBasemap: boolean;
+    onwrTiffBasemap: boolean;
     basins: boolean;
     waterLevels: boolean;
     rivers: boolean;
@@ -69,7 +153,47 @@ interface MapViewProps {
     rainfall: boolean;
     heatmap: boolean;
     timelapse: boolean;
+    tambonFlood: boolean;
+    foliumFloodProbability: boolean;
+    onwrSar: boolean;
+    onwrNational: boolean;
+    v3DailyValidation: boolean;
   };
+}
+
+function lerpChannel(a: number, b: number, t: number) {
+  return Math.round(a + (b - a) * Math.min(1, Math.max(0, t)));
+}
+
+export function zFromOnwrFeatureProperties(
+  p: Record<string, unknown> | undefined
+): number | null | undefined {
+  if (!p) return undefined;
+  for (const k of ["mean_z_score", "zscore", "z_score", "mean_z", "mean"]) {
+    const v = p[k];
+    if (v != null && v !== "" && !Number.isNaN(Number(v))) return Number(v);
+  }
+  return undefined;
+}
+
+/** Blue (z &lt; -3) → yellow (~0) → red (z &gt; 3) */
+export function zScoreChoroplethColor(z: number | null | undefined): string {
+  if (z == null || Number.isNaN(Number(z))) return "#94a3b8";
+  const v = Number(z);
+  if (v <= -3) return "#1e40af";
+  if (v >= 3) return "#b91c1c";
+  if (v < 0) {
+    const t = (v + 3) / 3;
+    const r = lerpChannel(30, 250, t);
+    const g = lerpChannel(64, 204, t);
+    const b = lerpChannel(175, 21, t);
+    return `rgb(${r},${g},${b})`;
+  }
+  const t = v / 3;
+  const r = lerpChannel(250, 185, t);
+  const g = lerpChannel(204, 28, t);
+  const b = lerpChannel(21, 28, t);
+  return `rgb(${r},${g},${b})`;
 }
 
 const BASIN_CENTERS: Record<string, [number, number]> = {
@@ -84,6 +208,11 @@ export default function MapViewSimple({
   rivers,
   dams,
   selectedBasin,
+  onwrSarGeoJSON,
+  onwrSarDate,
+  onwrNationalGeoJSON,
+  v3DailyGeoJSON,
+  onFoliumFloodLoaded,
   layers,
 }: MapViewProps) {
   const flyCenter = selectedBasin ? BASIN_CENTERS[selectedBasin] : undefined;
@@ -91,8 +220,18 @@ export default function MapViewSimple({
 
   // Dam icon
   const damIcon = L.divIcon({
-    html: '<div style="font-size:16px;font-weight:bold;">DAM</div>',
-    iconSize: [30, 20],
+    html: `
+      <div class="map-marker-shell map-marker-dam">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#f8fafc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Dam marker" role="img">
+          <path d="M4 19h16"></path>
+          <path d="M6 19V9l2-4"></path>
+          <path d="M10 19V8l2-3"></path>
+          <path d="M14 19v-8l2-2"></path>
+          <path d="M18 19v-6"></path>
+        </svg>
+      </div>
+    `,
+    iconSize: [24, 24],
     className: "",
   });
 
@@ -101,12 +240,42 @@ export default function MapViewSimple({
       center={[13.7, 100.5]}
       zoom={6}
       style={{ height: "100%", width: "100%" }}
-      className="rounded-lg shadow-lg"
+      className="rounded-mono shadow-mono-lg"
     >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+      {layers.esriBasemap ? (
+        <>
+          <TileLayer
+            attribution='&copy; <a href="https://www.esri.com/">Esri</a>'
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+            maxZoom={19}
+          />
+          <TileLayer
+            attribution=""
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+            maxZoom={19}
+            opacity={0.6}
+          />
+        </>
+      ) : layers.onwrTiffBasemap ? (
+        <>
+          <OnwrTiffBasemapLayer
+            visible={layers.onwrTiffBasemap}
+            url="/onwr-basemap-water-border-basin.tif"
+            opacity={0.9}
+          />
+          <TileLayer
+            attribution=""
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+            maxZoom={19}
+            opacity={0.65}
+          />
+        </>
+      ) : (
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+      )}
 
       {flyCenter && <FlyTo center={flyCenter} zoom={8} />}
 
@@ -116,6 +285,7 @@ export default function MapViewSimple({
           visible={layers.timelapse}
           startDate={new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)}
           endDate={new Date()}
+          basinId={selectedBasin}
         />
       )}
 
@@ -124,6 +294,7 @@ export default function MapViewSimple({
         <TileHeatmap
           visible={layers.heatmap}
           onTileClick={(tile) => setSelectedTile(tile)}
+          basinId={selectedBasin}
         />
       )}
 
@@ -210,17 +381,100 @@ export default function MapViewSimple({
         );
       })}
 
+      {/* ONWR national sub-basin choropleth (under per-basin layer) */}
+      {layers.onwrNational &&
+        onwrNationalGeoJSON &&
+        onwrNationalGeoJSON.features?.length > 0 && (
+          <GeoJSON
+            key={`onwr-national-${onwrNationalGeoJSON.features.length}`}
+            data={onwrNationalGeoJSON}
+            style={(feature) => {
+              const z = zFromOnwrFeatureProperties(feature?.properties as Record<string, unknown>);
+              const fill = zScoreChoroplethColor(z);
+              return {
+                color: "#64748b",
+                weight: 0.5,
+                fillColor: fill,
+                fillOpacity: 0.4,
+              };
+            }}
+            onEachFeature={(feature, layer) => {
+              const p = (feature.properties || {}) as Record<string, unknown>;
+              const z = zFromOnwrFeatureProperties(p);
+              const flood =
+                p.flood_detected === true || (typeof z === "number" && z <= -3);
+              layer.bindPopup(`
+              <div class="text-sm min-w-[200px]">
+                <div class="font-bold text-slate-900 border-b pb-1 mb-2">HYBAS ${p.HYBAS_ID ?? "—"}</div>
+                <div>${String(p.NAME || p.name || p.basin_en || p.basin_th || "")}</div>
+                <div class="font-mono text-xs mt-1">Date: ${String(p.date ?? "—")}</div>
+                <div class="font-mono text-xs">Z-score: ${z != null ? Number(z).toFixed(2) : "—"}</div>
+                <div class="font-mono text-xs">Flood signal: <strong>${flood ? "Yes" : "No"}</strong></div>
+              </div>
+            `);
+            }}
+          />
+        )}
+
+      {layers.onwrSar && onwrSarGeoJSON && onwrSarGeoJSON.features?.length > 0 && (
+        <FloodLayerSAR
+          geojson={onwrSarGeoJSON}
+          date={
+            onwrSarDate ??
+            String(onwrSarGeoJSON.properties?.date ?? "")
+          }
+        />
+      )}
+
+      {layers.v3DailyValidation &&
+        v3DailyGeoJSON &&
+        v3DailyGeoJSON.features?.length > 0 && (
+          <GeoJSON
+            key={`v3-daily-${v3DailyGeoJSON.features.length}`}
+            data={v3DailyGeoJSON}
+            pointToLayer={(feature, latlng) => {
+              const p = (feature.properties || {}) as Record<string, unknown>;
+              const fill = String(p.fill ?? "#94a3b8");
+              return L.circleMarker(latlng, {
+                radius: 3,
+                color: fill,
+                weight: 0.5,
+                fillColor: fill,
+                fillOpacity: 0.8,
+                opacity: 1,
+              });
+            }}
+            onEachFeature={(feature, layer) => {
+              const p = (feature.properties || {}) as Record<string, unknown>;
+              const label = String(p.label ?? "");
+              if (label) layer.bindTooltip(label, { sticky: true, direction: "top", opacity: 0.95 });
+            }}
+          />
+        )}
+
+      {layers.foliumFloodProbability && (
+        <FoliumFloodProbabilityLayer
+          visible={layers.foliumFloodProbability}
+          onLoaded={onFoliumFloodLoaded}
+        />
+      )}
+
       {/* Basin boundaries */}
       {layers.basins && basins && (
         <GeoJSON
           data={basins}
           style={(feature) => {
             const isSelected = feature?.properties.id === selectedBasin;
+            const suppressFill = layers.onwrSar || layers.foliumFloodProbability;
             return {
               color: isSelected ? "#1e40af" : "#3b82f6",
               weight: isSelected ? 3 : 2,
               fillColor: isSelected ? "#3b82f6" : "#60a5fa",
-              fillOpacity: isSelected ? 0.15 : 0.08,
+              fillOpacity: suppressFill
+                ? 0
+                : isSelected
+                  ? 0.15
+                  : 0.08,
               dashArray: isSelected ? undefined : "5 5",
             };
           }}

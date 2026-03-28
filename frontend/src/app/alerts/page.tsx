@@ -17,7 +17,7 @@ export default function AlertsPage() {
     try {
       const [active, history] = await Promise.all([
         alertsAPI.active(),
-        alertsAPI.history(30),
+        alertsAPI.historyWithFallback(30),
       ]);
       setAlerts(active.data.alerts || []);
       setHistoryAlerts(history.data.alerts || []);

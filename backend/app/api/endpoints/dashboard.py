@@ -15,6 +15,37 @@ router = APIRouter()
 settings = get_settings()
 
 
+@router.get("/summary")
+async def get_dashboard_summary(
+    days: int = Query(default=30, ge=1, le=365),
+    db: AsyncSession = Depends(get_db),
+):
+    """Aggregates for analytics: mean water level and total rainfall over the window."""
+    now = datetime.utcnow()
+    since = now - timedelta(days=days)
+
+    avg_wl = await db.scalar(
+        select(func.avg(WaterLevel.level_m)).where(
+            and_(
+                WaterLevel.datetime >= since,
+                WaterLevel.datetime <= now,
+                WaterLevel.level_m.isnot(None),
+            )
+        )
+    )
+    total_rain = await db.scalar(
+        select(func.sum(Rainfall.amount_mm)).where(
+            and_(Rainfall.datetime >= since, Rainfall.datetime <= now)
+        )
+    )
+
+    return {
+        "period_days": days,
+        "avgWaterLevel": float(avg_wl) if avg_wl is not None else 0.0,
+        "totalRainfall": float(total_rain) if total_rain is not None else 0.0,
+    }
+
+
 @router.get("/overview")
 async def get_overview(db: AsyncSession = Depends(get_db)):
     """ภาพรวมทั้ง 3 ลุ่มน้ำ"""

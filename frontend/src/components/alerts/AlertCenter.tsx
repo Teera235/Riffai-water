@@ -1,8 +1,26 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Bell, X, AlertTriangle, Info, CheckCircle, XCircle } from "lucide-react";
+import { Bell, X, AlertTriangle, Info, CheckCircle } from "lucide-react";
 import toast from "react-hot-toast";
+import { alertsAPI } from "@/services/api";
+
+const BASIN_LABEL: Record<string, string> = {
+  mekong_north: "ลุ่มน้ำโขงเหนือ",
+  eastern_coast: "ชายฝั่งตะวันออก",
+  southern_east: "ภาคใต้ฝั่งตะวันออก",
+};
+
+interface BackendAlertRow {
+  id: number;
+  basin_id: string;
+  level: string;
+  title: string;
+  message: string;
+  created_at: string;
+  acknowledged: boolean;
+  is_active?: boolean;
+}
 
 interface Alert {
   id: number;
@@ -14,6 +32,25 @@ interface Alert {
   read: boolean;
 }
 
+function levelToType(level: string): Alert["type"] {
+  if (level === "critical") return "critical";
+  if (level === "warning") return "warning";
+  if (level === "watch") return "warning";
+  return "info";
+}
+
+function mapRow(row: BackendAlertRow): Alert {
+  return {
+    id: row.id,
+    type: levelToType(row.level),
+    title: row.title,
+    message: row.message ?? "",
+    location: BASIN_LABEL[row.basin_id] || row.basin_id,
+    timestamp: row.created_at,
+    read: row.acknowledged,
+  };
+}
+
 export default function AlertCenter() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -21,7 +58,6 @@ export default function AlertCenter() {
 
   useEffect(() => {
     loadAlerts();
-    // Poll for new alerts every 30 seconds
     const interval = setInterval(loadAlerts, 30000);
     return () => clearInterval(interval);
   }, []);
@@ -33,26 +69,19 @@ export default function AlertCenter() {
 
   const loadAlerts = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/alerts");
-      const data = await response.json();
-      
-      // Check for new alerts
-      const newAlerts = data.filter(
-        (alert: Alert) => !alerts.find((a) => a.id === alert.id)
-      );
-      
-      if (newAlerts.length > 0) {
-        // Show toast for critical alerts
-        newAlerts.forEach((alert: Alert) => {
+      const { data } = await alertsAPI.feedWithFallback({ days: 14, limit: 100 });
+      const raw: BackendAlertRow[] = Array.isArray(data) ? data : [];
+      const mapped = raw.map(mapRow);
+
+      setAlerts((prev) => {
+        const newOnes = mapped.filter((alert) => !prev.find((a) => a.id === alert.id));
+        newOnes.forEach((alert) => {
           if (alert.type === "critical") {
-            toast.error(`🚨 ${alert.title}`, {
-              duration: 5000,
-            });
+            toast.error(`🚨 ${alert.title}`, { duration: 5000 });
           }
         });
-      }
-      
-      setAlerts(data);
+        return mapped;
+      });
     } catch (error) {
       console.error("Failed to load alerts:", error);
     }
@@ -60,9 +89,7 @@ export default function AlertCenter() {
 
   const markAsRead = async (alertId: number) => {
     try {
-      await fetch(`http://localhost:8000/api/alerts/${alertId}/read`, {
-        method: "POST",
-      });
+      await alertsAPI.markRead(alertId);
       setAlerts((prev) =>
         prev.map((a) => (a.id === alertId ? { ...a, read: true } : a))
       );
@@ -74,11 +101,7 @@ export default function AlertCenter() {
   const markAllAsRead = async () => {
     try {
       await Promise.all(
-        alerts.filter((a) => !a.read).map((a) =>
-          fetch(`http://localhost:8000/api/alerts/${a.id}/read`, {
-            method: "POST",
-          })
-        )
+        alerts.filter((a) => !a.read).map((a) => alertsAPI.markRead(a.id))
       );
       setAlerts((prev) => prev.map((a) => ({ ...a, read: true })));
     } catch (error) {
@@ -88,9 +111,7 @@ export default function AlertCenter() {
 
   const deleteAlert = async (alertId: number) => {
     try {
-      await fetch(`http://localhost:8000/api/alerts/${alertId}`, {
-        method: "DELETE",
-      });
+      await alertsAPI.dismiss(alertId);
       setAlerts((prev) => prev.filter((a) => a.id !== alertId));
     } catch (error) {
       console.error("Failed to delete alert:", error);
@@ -125,7 +146,6 @@ export default function AlertCenter() {
 
   return (
     <>
-      {/* Alert Bell Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="fixed top-4 right-4 z-[1001] p-3 bg-white rounded-full shadow-lg hover:shadow-xl transition-shadow"
@@ -138,10 +158,8 @@ export default function AlertCenter() {
         )}
       </button>
 
-      {/* Alert Panel */}
       {isOpen && (
         <div className="fixed top-20 right-4 z-[1001] w-96 max-h-[600px] bg-white rounded-lg shadow-2xl flex flex-col overflow-hidden">
-          {/* Header */}
           <div className="p-4 border-b bg-gradient-to-r from-primary-600 to-primary-700 text-white">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
@@ -165,7 +183,6 @@ export default function AlertCenter() {
             )}
           </div>
 
-          {/* Alert List */}
           <div className="flex-1 overflow-y-auto">
             {alerts.length === 0 ? (
               <div className="p-8 text-center text-gray-500">
@@ -231,7 +248,6 @@ export default function AlertCenter() {
             )}
           </div>
 
-          {/* Footer */}
           <div className="p-3 border-t bg-gray-50 text-center">
             <button
               onClick={loadAlerts}

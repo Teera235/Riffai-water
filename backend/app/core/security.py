@@ -16,6 +16,7 @@ settings = get_settings()
 import bcrypt as _bcrypt
 
 security = HTTPBearer()
+optional_security = HTTPBearer(auto_error=False)
 
 ALGORITHM = "HS256"
 
@@ -62,6 +63,27 @@ async def get_current_user(
     user = await db.get(User, user_id)
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="User not found or inactive")
+    return user
+
+
+async def get_optional_current_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
+    db: AsyncSession = Depends(get_db),
+) -> Optional[User]:
+    if credentials is None:
+        return None
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        raw_id = payload.get("sub")
+        if raw_id is None:
+            return None
+        user_id = int(raw_id)
+    except (JWTError, TypeError, ValueError):
+        return None
+    user = await db.get(User, user_id)
+    if not user or not user.is_active:
+        return None
     return user
 
 

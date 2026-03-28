@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Navbar from "@/components/common/Navbar";
+import api, { mapAPI } from "@/services/api";
 import {
   TrendingUp,
   TrendingDown,
@@ -22,12 +23,16 @@ export default function AnalyticsPage() {
     loadAnalytics();
   }, [timeRange]);
 
+  const daysFromTimeRange = (r: string) =>
+    ({ "24h": 1, "7d": 7, "30d": 30, "90d": 90 }[r] ?? 7);
+
   const loadAnalytics = async () => {
     try {
       setLoading(true);
+      const days = daysFromTimeRange(timeRange);
       const [dashboard, tiles] = await Promise.all([
-        fetch("http://localhost:8000/api/dashboard/summary").then((r) => r.json()),
-        fetch("http://localhost:8000/api/map/tiles/summary").then((r) => r.json()),
+        api.get("/api/dashboard/summary", { params: { days } }).then((r) => r.data),
+        mapAPI.tilesSummary().then((r) => r.data),
       ]);
       
       setStats({ dashboard, tiles });
