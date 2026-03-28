@@ -23,11 +23,15 @@ export default function AnalyticsPage() {
     loadAnalytics();
   }, [timeRange]);
 
+  const daysFromTimeRange = (r: string) =>
+    ({ "24h": 1, "7d": 7, "30d": 30, "90d": 90 }[r] ?? 7);
+
   const loadAnalytics = async () => {
     try {
       setLoading(true);
+      const days = daysFromTimeRange(timeRange);
       const [dashboard, tiles] = await Promise.all([
-        api.get("/api/dashboard/summary").then((r) => r.data),
+        api.get("/api/dashboard/summary", { params: { days } }).then((r) => r.data),
         mapAPI.tilesSummary().then((r) => r.data),
       ]);
       

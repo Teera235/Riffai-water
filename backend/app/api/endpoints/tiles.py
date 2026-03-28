@@ -263,14 +263,22 @@ async def get_tile_satellite_data(tile_id: str):
     from app.services.earth_engine_service import get_earth_engine_service
     from datetime import datetime, timedelta
     
-    # Parse tile ID to get coordinates
-    # Format: tile_LAT_LON (e.g., tile_15.5_100.5)
+    # Parse tile ID: grid uses "lat_lon" (e.g. 14.5_100.2); legacy "tile_lat_lon" also supported
+    parts = tile_id.split("_")
     try:
-        parts = tile_id.split("_")
-        lat = float(parts[1])
-        lon = float(parts[2])
-    except:
-        return {"error": "Invalid tile ID format"}, 400
+        if len(parts) == 3 and parts[0].lower() == "tile":
+            lat = float(parts[1])
+            lon = float(parts[2])
+        elif len(parts) == 2:
+            lat = float(parts[0])
+            lon = float(parts[1])
+        else:
+            raise ValueError("unsupported tile id format")
+    except (ValueError, IndexError) as e:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid tile ID format. Use lat_lon (e.g. 14.5_100.2) or tile_lat_lon.",
+        ) from e
     
     # Create bounding box (0.5 degree tile)
     tile_size = 0.5

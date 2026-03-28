@@ -214,3 +214,59 @@ async def get_satellite_indices(
             for r in result
         ],
     }
+
+
+@router.get("/comparison/{basin_id}")
+async def compare_years(
+    basin_id: str,
+    year1: int = Query(..., ge=1990, le=2100),
+    year2: int = Query(..., ge=1990, le=2100),
+    db: AsyncSession = Depends(get_db),
+):
+    """Year-over-year rainfall totals and mean satellite water area for the basin."""
+
+    async def rainfall_total(year: int) -> float:
+        start = datetime(year, 1, 1)
+        end = datetime(year + 1, 1, 1)
+        total = await db.scalar(
+            select(func.coalesce(func.sum(Rainfall.amount_mm), 0))
+            .join(Station, Rainfall.station_id == Station.id)
+            .where(
+                and_(
+                    Station.basin_id == basin_id,
+                    Rainfall.datetime >= start,
+                    Rainfall.datetime < end,
+                )
+            )
+        )
+        return float(total) if total is not None else 0.0
+
+    async def avg_water_area(year: int) -> Optional[float]:
+        start = datetime(year, 1, 1)
+        end = datetime(year + 1, 1, 1)
+        avg = await db.scalar(
+            select(func.avg(SatelliteImage.water_area_sqkm))
+            .where(
+                and_(
+                    SatelliteImage.basin_id == basin_id,
+                    SatelliteImage.acquisition_date >= start,
+                    SatelliteImage.acquisition_date < end,
+                    SatelliteImage.water_area_sqkm.isnot(None),
+                )
+            )
+        )
+        return float(avg) if avg is not None else None
+
+    return {
+        "basin_id": basin_id,
+        "year1": {
+            "year": year1,
+            "total_rainfall_mm": await rainfall_total(year1),
+            "avg_water_area_sqkm": await avg_water_area(year1),
+        },
+        "year2": {
+            "year": year2,
+            "total_rainfall_mm": await rainfall_total(year2),
+            "avg_water_area_sqkm": await avg_water_area(year2),
+        },
+    }
